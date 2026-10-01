@@ -55,6 +55,7 @@ Higgsfield 이미지·영상 생성과 `virality_predictor`도 요청할 때만 
 
 ## 참고
 
+- 기본 모델은 `gemini-flash-latest`(항상 최신 Flash)입니다. 다른 모델은 환경변수 `GEMINI_MODEL` 이나 `--model` 로 지정합니다. 19초 영상 테스트에서 약 1분, 3.8천 토큰이 들었습니다.
 - Gemini 무료 등급은 하루 요청 수와 분당 토큰에 한도가 있습니다. 긴 영상은 `--low-res` 나 `--start/--end` 로 나눠 분석합니다.
 - 공개 또는 일부 공개 영상만 Gemini API로 분석할 수 있습니다.
 - 이미지·영상 생성은 Higgsfield 크레딧을 씁니다. 스킬은 프롬프트까지만 만들고, 실제 생성은 요청할 때만 실행합니다.

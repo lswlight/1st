@@ -21,7 +21,7 @@ import urllib.request
 from pathlib import Path
 
 API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models"
-DEFAULT_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+DEFAULT_MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
 KEY_FILE = Path(__file__).resolve().parent.parent / "config" / "gemini_api_key.txt"
 
 PROMPT = """너는 유튜브 영상 편집자이자 콘텐츠 분석가다. 이 영상을 처음부터 끝까지 직접 보고 듣고,
