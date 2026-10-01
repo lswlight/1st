@@ -22,6 +22,8 @@ from pathlib import Path
 
 API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models"
 DEFAULT_MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
+# 기본 모델이 과부하(503)거나 사라졌을(404) 때 차례로 시도할 대체 모델
+FALLBACK_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-lite-latest"]
 KEY_FILE = Path(__file__).resolve().parent.parent / "config" / "gemini_api_key.txt"
 
 PROMPT = """너는 유튜브 영상 편집자이자 콘텐츠 분석가다. 이 영상을 처음부터 끝까지 직접 보고 듣고,
@@ -46,6 +48,12 @@ PROMPT = """너는 유튜브 영상 편집자이자 콘텐츠 분석가다. 이 
 ## 6. 구성 구간
 - 훅 / 문제제기 / 전개 / 반전·클라이맥스 / 결론 / CTA 로 나누고 각 구간의 시간 범위를 적어라.
 """
+
+
+class ModelError(Exception):
+    def __init__(self, code, msg):
+        super().__init__(f"ERROR {code}: {msg}")
+        self.code = code
 
 
 def load_key():
@@ -96,7 +104,7 @@ def analyze(url, model, start=None, end=None, low_res=False):
             if e.code in (429, 500, 503) and attempt < 2:
                 time.sleep(10 * (attempt + 1))
                 continue
-            sys.exit(f"ERROR {e.code}: {msg[:1000]}")
+            raise ModelError(e.code, msg[:1000])
 
     try:
         text = "".join(p.get("text", "") for p in data["candidates"][0]["content"]["parts"])
@@ -116,8 +124,16 @@ def main():
     ap.add_argument("--out", help="결과 저장 파일 (기본: 표준출력)")
     a = ap.parse_args()
 
-    text, usage = analyze(a.url, a.model, a.start, a.end, a.low_res)
-    header = f"<!-- source: Gemini API ({a.model}) | url: {a.url} | tokens: {usage.get('totalTokenCount', '?')} -->\n"
+    candidates = [a.model] + [m for m in FALLBACK_MODELS if m != a.model]
+    for model in candidates:
+        try:
+            text, usage = analyze(a.url, model, a.start, a.end, a.low_res)
+            break
+        except ModelError as e:
+            print(f"{model} 실패 ({e.code}), 다음 모델 시도", file=sys.stderr)
+            if e.code not in (404, 429, 500, 503) or model == candidates[-1]:
+                sys.exit(str(e))
+    header = f"<!-- source: Gemini API ({model}) | url: {a.url} | tokens: {usage.get('totalTokenCount', '?')} -->\n"
     if a.out:
         Path(a.out).write_text(header + text)
         print(f"saved {a.out} ({usage.get('totalTokenCount', '?')} tokens)")
