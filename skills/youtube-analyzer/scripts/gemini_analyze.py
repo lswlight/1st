@@ -4,7 +4,7 @@
 표준 라이브러리만 사용한다 (pip 설치 불필요).
 
 사용법:
-    python3 gemini_analyze.py <youtube_url> [--start 0s] [--end 60s] [--low-res] [--out FILE]
+    python3 gemini_analyze.py <youtube_url> [--start 30s] [--end 40s] [--low-res] [--focus "질문"] [--out FILE]
 
 API 키는 다음 순서로 찾는다:
     1. 환경변수 GEMINI_API_KEY
@@ -23,7 +23,7 @@ from pathlib import Path
 API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models"
 DEFAULT_MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
 # 기본 모델이 과부하(503)거나 사라졌을(404) 때 차례로 시도할 대체 모델
-FALLBACK_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-lite-latest"]
+FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-lite-latest"]
 KEY_FILE = Path(__file__).resolve().parent.parent / "config" / "gemini_api_key.txt"
 
 PROMPT = """너는 유튜브 영상 편집자이자 콘텐츠 분석가다. 이 영상을 처음부터 끝까지 직접 보고 듣고,
@@ -71,7 +71,7 @@ def normalize_url(url):
     return f"https://www.youtube.com/watch?v={m.group(1)}" if m else url
 
 
-def analyze(url, model, start=None, end=None, low_res=False):
+def analyze(url, model, start=None, end=None, low_res=False, focus=None):
     video_part = {"file_data": {"file_uri": normalize_url(url)}}
     if start or end:
         meta = {}
@@ -82,7 +82,7 @@ def analyze(url, model, start=None, end=None, low_res=False):
         video_part["video_metadata"] = meta
 
     body = {
-        "contents": [{"parts": [video_part, {"text": PROMPT}]}],
+        "contents": [{"parts": [video_part, {"text": PROMPT + (f"\n\n## 7. 사용자 질문\n{focus}" if focus else "")}]}],
         "generationConfig": {"temperature": 0.2},
     }
     if low_res:
@@ -102,9 +102,13 @@ def analyze(url, model, start=None, end=None, low_res=False):
         except urllib.error.HTTPError as e:
             msg = e.read().decode(errors="replace")
             if e.code in (429, 500, 503) and attempt < 2:
-                time.sleep(10 * (attempt + 1))
+                # 429는 분당 한도이므로 더 오래 기다린다
+                time.sleep((30 if e.code == 429 else 10) * (attempt + 1))
                 continue
             raise ModelError(e.code, msg[:1000])
+        except urllib.error.URLError as e:
+            sys.exit(f"NETWORK_BLOCKED: Gemini 서버에 접속하지 못했습니다 ({e.reason}). "
+                     "코드 실행 네트워크 설정에서 generativelanguage.googleapis.com 을 허용해야 합니다.")
 
     try:
         text = "".join(p.get("text", "") for p in data["candidates"][0]["content"]["parts"])
@@ -121,19 +125,38 @@ def main():
     ap.add_argument("--start", help="분석 시작 지점, 예: 30s")
     ap.add_argument("--end", help="분석 끝 지점, 예: 120s")
     ap.add_argument("--low-res", action="store_true", help="긴 영상용 저해상도 모드")
+    ap.add_argument("--focus", help="특정 구간/관점에 대한 추가 질문")
     ap.add_argument("--out", help="결과 저장 파일 (기본: 표준출력)")
     a = ap.parse_args()
 
     candidates = [a.model] + [m for m in FALLBACK_MODELS if m != a.model]
-    for model in candidates:
-        try:
-            text, usage = analyze(a.url, model, a.start, a.end, a.low_res)
+    # 429(분당 처리량 한도)로 전부 실패하면 저해상도로 한 번 더 돈다
+    resolutions = [a.low_res] if a.low_res else [False, True]
+    result, last_err = None, None
+    for low_res in resolutions:
+        hit_quota = False
+        for model in candidates:
+            try:
+                result = analyze(a.url, model, a.start, a.end, low_res, a.focus)
+                break
+            except ModelError as e:
+                last_err = e
+                hit_quota |= e.code == 429
+                print(f"{model} 실패 ({e.code}), 다음 모델 시도", file=sys.stderr)
+                if e.code not in (404, 429, 500, 503):
+                    sys.exit(str(e))
+        if result or not hit_quota:
             break
-        except ModelError as e:
-            print(f"{model} 실패 ({e.code}), 다음 모델 시도", file=sys.stderr)
-            if e.code not in (404, 429, 500, 503) or model == candidates[-1]:
-                sys.exit(str(e))
-    header = f"<!-- source: Gemini API ({model}) | url: {a.url} | tokens: {usage.get('totalTokenCount', '?')} -->\n"
+        print("분당 처리량 한도(429) — 저해상도로 재시도", file=sys.stderr)
+    if not result:
+        hint = ""
+        if last_err.code == 429:
+            hint = "\n힌트: 무료 한도 초과. 1분 뒤 다시 하거나 --start/--end 로 구간을 줄이세요."
+        elif last_err.code == 503:
+            hint = "\n힌트: Gemini 서버 혼잡. 잠시 뒤 다시 시도하세요."
+        sys.exit(str(last_err) + hint)
+    text, usage = result
+    header = f"<!-- source: Gemini API ({model}{', low-res' if low_res else ''}) | url: {a.url} | tokens: {usage.get('totalTokenCount', '?')} -->\n"
     if a.out:
         Path(a.out).write_text(header + text)
         print(f"saved {a.out} ({usage.get('totalTokenCount', '?')} tokens)")
