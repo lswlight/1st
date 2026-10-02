@@ -10,13 +10,15 @@ skills/youtube-analyzer/
 └── references/
     ├── report-template.md           # 분석 리포트 양식
     └── production-handoff.md        # 내 영상 제작 핸드오프 양식
-dist/youtube-analyzer.zip            # claude.ai 업로드용 패키지
+dist/youtube-analyzer.zip            # claude.ai 업로드용 패키지 (키 없음)
+connector/worker.js                  # 채팅·모바일용 MCP 커넥터 (Cloudflare Workers)
 ```
 
 ## 동작 방식 (무료 경로가 기본)
 
 | 순서 | 경로 | 비용 | 하는 일 |
 |---|---|---|---|
+| A0 | **YouTube Analyzer 커넥터** (`connector/`) | 무료 | 채팅·모바일에서 바로 Gemini 분석. 키는 Cloudflare 서버에만 보관. 설치: [connector/README.md](connector/README.md) |
 | A | **Gemini API** (`scripts/gemini_analyze.py`) | 무료 한도 안에서 0원 | Gemini가 유튜브 영상을 직접 보고 장면표, 첫 15초 정밀 기록, 대본 전문을 뽑음 |
 | B | Gemini 앱 결과 붙여넣기 | 무료 | 코드 실행이 안 될 때 |
 | C | 유튜브 "스크립트 표시" 붙여넣기 | 무료 | 대본만으로 분석 |
