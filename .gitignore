@@ -1,3 +1,4 @@
 skills/youtube-analyzer/config/gemini_api_key.txt
 dist-private/
 __pycache__/
+browser-output/
