@@ -1,4 +1,35 @@
-# 유튜브 영상 분석 스킬 (클라우드 / 모바일용)
+# Claude 스킬 모음 (클라우드 / 모바일용)
+
+| 스킬 | 하는 일 | 업로드 파일 |
+|---|---|---|
+| `youtube-analyzer` | 유튜브 영상 장면 분석 → 대본·스토리보드·Higgsfield 프롬프트 | `dist/youtube-analyzer.zip` |
+| `blog-writer` | 주제 → SEO 키워드·제목 후보 → 해요체 블로그 본문·메타 설명·내부 링크 | `dist/blog-writer.zip` |
+
+## 블로그 글 작성 스킬 (`blog-writer`)
+
+```
+skills/blog-writer/
+├── SKILL.md                     # 작업 순서와 스타일·SEO 규칙
+├── references/post-template.md  # 본문 양식, 해요체·과장 표현 바꾸기 예시
+└── scripts/check_post.py        # 길이·H2·키워드 밀도·문체 자동 검사 (표준 라이브러리만 사용)
+```
+
+1. 주제를 주면 SEO 타겟 키워드 3개와 숫자+키워드 제목 후보 5개를 제안하고 멈춥니다.
+2. 제목을 고르면 아웃라인 → 본문(공백 제외 1,500~2,500자) → 메타 설명(155자 이내) → 내부 링크 추천 3개를 이어서 만듭니다.
+3. 해요체, H2마다 핵심 한 줄 요약, 비유 2개 이상, 도입부 hook, 마무리 CTA를 지킵니다. 키워드 밀도는 1~2%로 맞춥니다.
+4. 내 블로그 글 목록이나 URL을 함께 주면 내부 링크를 그 안에서 고릅니다. 주지 않으면 링크를 지어내지 않고 `[링크 추가]`로 표시합니다.
+
+사용 예 (모바일 앱):
+> 볼린저 밴드 수축 구간 매매법으로 블로그 글 써줘
+
+본문 검사만 따로 돌릴 때:
+```bash
+python3 skills/blog-writer/scripts/check_post.py post.md --keyword "볼린저 밴드" --sub "볼린저 밴드 매매법" --meta "메타 설명"
+```
+
+---
+
+# 유튜브 영상 분석 스킬 (`youtube-analyzer`)
 
 유튜브 링크만 주면 장면 단위로 분석하고, 그 구조를 내 영상의 대본·스토리보드·Higgsfield 프롬프트로 바꿔 주는 Claude 스킬입니다.
 
@@ -51,7 +82,7 @@ Higgsfield 이미지·영상 생성과 `virality_predictor`도 요청할 때만 
 ## 스킬 수정 후 다시 패키징
 
 ```bash
-./build.sh   # dist/youtube-analyzer.zip 재생성
+./build.sh   # skills/ 아래 모든 스킬의 dist/<스킬>.zip 재생성
 ```
 만든 zip을 claude.ai에 다시 업로드하면 반영됩니다. 이 GitHub 저장소가 스킬의 원본(백업과 버전 관리)입니다.
 
