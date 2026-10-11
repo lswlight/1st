@@ -6,6 +6,7 @@
 
 - `skills/youtube-analyzer/` — 스킬 원본. `.claude/skills/youtube-analyzer` 는 이 폴더를 가리키는 심볼릭 링크이므로 원본만 수정한다.
 - `connector/worker.js` — Cloudflare Workers MCP 커넥터 (단일 파일, 외부 의존성 없음).
+- `.claude/skills/gws-*`, `recipe-*`, `persona-researcher` — googleworkspace/cli (v0.22.5, Apache-2.0, `GWS_LICENSE.txt`)에서 복사한 Google Workspace 스킬. 실행하려면 `gws` CLI 설치와 `gws auth login` 이 필요하다. 원본을 고치지 말고 업스트림 버전으로 교체한다.
 - `dist/youtube-analyzer.zip` — claude.ai 업로드용 패키지. 직접 수정하지 말고 `./build.sh` 로 다시 만든다.
 
 ## 작업 규칙
