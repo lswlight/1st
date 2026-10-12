@@ -91,6 +91,9 @@ def main():
         checks.append(("메타 설명 (155자 이내)", len(a.meta) <= 155 and count(a.meta, kw) > 0,
                        f"{len(a.meta)}자, 키워드 {'포함' if count(a.meta, kw) else '없음'}"))
 
+    todo = raw.count("[확인 필요]")
+    if todo:
+        print(f"[주의] 본문에 '[확인 필요]' 표시가 {todo}곳 남아 있어요. 발행 전에 확인하세요.")
     for k in a.sub:
         print(f"[정보] 서브 키워드 '{k}': {count(plain, k)}회")
     ok_all = True
