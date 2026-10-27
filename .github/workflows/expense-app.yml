@@ -29,6 +29,12 @@ jobs:
       - name: 테스트 및 APK 빌드
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
 
+      - name: 서명 및 패키지 정보 확인
+        run: |
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT"/apksigner verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
+          "$BT"/aapt2 dump badging app/build/outputs/apk/debug/app-debug.apk | head -8
+
       - name: APK 업로드 (Actions 아티팩트)
         uses: actions/upload-artifact@v4
         with:
@@ -46,3 +52,30 @@ jobs:
             --target "$GITHUB_SHA" --prerelease \
             --title "자동가계부 최신 APK" \
             --notes "브랜치 ${GITHUB_REF_NAME} / 커밋 ${GITHUB_SHA::7} 에서 자동 빌드됨. 폰에서 moneybook.apk 를 받아 설치하세요."
+
+  # 실제 안드로이드(에뮬레이터)에 설치하고 실행되는지 확인한다
+  install-test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: moneybook-apk
+
+      - name: KVM 사용 설정
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: 에뮬레이터 설치·실행 테스트
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          script: |
+            adb install -r app-debug.apk
+            adb shell am start -W -n com.lswlight.moneybook/.MainActivity
+            sleep 5
+            adb shell pidof com.lswlight.moneybook
