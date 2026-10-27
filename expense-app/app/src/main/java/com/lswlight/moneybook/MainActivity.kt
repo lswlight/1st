@@ -96,6 +96,8 @@ class MainActivity : Activity() {
             addView(button("문자 붙여넣기") { pasteMessage() }, weight())
         }, margins(top = 8))
 
+        root.addView(button("최근 감지 알림 보기") { showDetectLog() }, margins(top = 0))
+
         list = vertical()
         root.addView(list, margins(top = 8))
 
@@ -250,6 +252,29 @@ class MainActivity : Activity() {
             .show()
     }
 
+    /** 자동 기록이 안 될 때 원인을 보는 창: 앱이 받은 알림 원문과 처리 결과. */
+    private fun showDetectLog() {
+        val items = DetectLog.list(this)
+        val body = vertical().apply { setPadding(dp(20), dp(8), dp(20), 0) }
+        if (items.isEmpty()) {
+            body.addView(text("아직 받은 알림이 없어요.\n알림 접근이 허용되어 있는지 확인해 주세요.", 14f, Color.GRAY))
+        }
+        for (it in items) {
+            body.addView(text("${it.time.format(LOG_TIME)} · ${it.app}", 12f, Color.GRAY).apply {
+                setPadding(0, dp(12), 0, 0)
+            })
+            val color = if (it.result.startsWith("기록됨")) INCOME_COLOR else EXPENSE_COLOR
+            body.addView(text(it.result, 14f, color, bold = true))
+            body.addView(text(it.text.ifBlank { "(알림 내용이 비어 있음)" }, 13f))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("최근 감지 알림")
+            .setView(ScrollView(this).apply { addView(body) })
+            .setPositiveButton("닫기", null)
+            .setNeutralButton("지우기") { _, _ -> DetectLog.clear(this) }
+            .show()
+    }
+
     // ---------------------------------------------------------------- 도우미
 
     private fun listenerEnabled(): Boolean {
@@ -320,6 +345,7 @@ class MainActivity : Activity() {
         private val EXPENSE_COLOR = Color.parseColor("#D93025")
         private val DAY_HEADER = DateTimeFormatter.ofPattern("M월 d일 (E)", java.util.Locale.KOREAN)
         private val TIME = DateTimeFormatter.ofPattern("HH:mm")
+        private val LOG_TIME = DateTimeFormatter.ofPattern("M/d HH:mm:ss")
         private val INPUT_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
         fun won(v: Long) = "%,d원".format(v)
