@@ -1,0 +1,48 @@
+name: 자동가계부 APK 빌드
+
+on:
+  push:
+    paths:
+      - "expense-app/**"
+      - ".github/workflows/expense-app.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: expense-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: 테스트 및 APK 빌드
+        run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
+
+      - name: APK 업로드 (Actions 아티팩트)
+        uses: actions/upload-artifact@v4
+        with:
+          name: moneybook-apk
+          path: expense-app/app/build/outputs/apk/debug/app-debug.apk
+
+      # 폰 브라우저에서 바로 받을 수 있게 Releases 의 moneybook-latest 에 최신 APK 를 올린다
+      - name: 최신 APK 릴리스 갱신
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk moneybook.apk
+          gh release delete moneybook-latest --yes --cleanup-tag || true
+          gh release create moneybook-latest moneybook.apk \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "자동가계부 최신 APK" \
+            --notes "브랜치 ${GITHUB_REF_NAME} / 커밋 ${GITHUB_SHA::7} 에서 자동 빌드됨. 폰에서 moneybook.apk 를 받아 설치하세요."

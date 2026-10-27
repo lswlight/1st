@@ -7,6 +7,7 @@
 - `skills/youtube-analyzer/` — 스킬 원본. `.claude/skills/youtube-analyzer` 는 이 폴더를 가리키는 심볼릭 링크이므로 원본만 수정한다.
 - `connector/worker.js` — Cloudflare Workers MCP 커넥터 (단일 파일, 외부 의존성 없음).
 - `dist/youtube-analyzer.zip` — claude.ai 업로드용 패키지. 직접 수정하지 말고 `./build.sh` 로 다시 만든다.
+- `expense-app/` — 별도 프로젝트인 안드로이드 자동가계부 앱. 외부 라이브러리 없이 기본 API 만 쓴다. APK 는 `.github/workflows/expense-app.yml` 이 빌드한다. 자세한 내용은 expense-app/README.md.
 
 ## 작업 규칙
 

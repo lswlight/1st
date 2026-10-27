@@ -1,0 +1,327 @@
+package com.lswlight.moneybook
+
+import android.app.Activity
+import android.app.AlertDialog
+import android.content.ComponentName
+import android.content.Intent
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import android.os.Bundle
+import android.provider.Settings
+import android.text.InputType
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+import java.time.LocalDateTime
+import java.time.YearMonth
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
+
+/** 한 화면짜리 가계부: 월 이동, 수입/지출/잔액 요약, 내역 목록. 레이아웃은 코드로 만든다. */
+class MainActivity : Activity() {
+
+    private lateinit var db: LedgerDb
+    private var month: YearMonth = YearMonth.now()
+
+    private lateinit var monthLabel: TextView
+    private lateinit var incomeText: TextView
+    private lateinit var expenseText: TextView
+    private lateinit var balanceText: TextView
+    private lateinit var permissionBanner: LinearLayout
+    private lateinit var list: LinearLayout
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        db = LedgerDb.get(this)
+        setContentView(buildLayout())
+    }
+
+    override fun onResume() {
+        super.onResume()
+        LedgerDb.onChanged = { refresh() }
+        refresh()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        LedgerDb.onChanged = null
+    }
+
+    // ---------------------------------------------------------------- 화면 구성
+
+    private fun buildLayout(): View {
+        val root = vertical().apply { setPadding(dp(16), dp(12), dp(16), dp(24)) }
+
+        // 월 이동
+        root.addView(horizontal().apply {
+            gravity = Gravity.CENTER_VERTICAL
+            addView(button("◀") { month = month.minusMonths(1); refresh() })
+            monthLabel = text("", 20f, bold = true).apply { gravity = Gravity.CENTER }
+            addView(monthLabel, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            addView(button("▶") { month = month.plusMonths(1); refresh() })
+        })
+
+        // 요약 카드
+        root.addView(vertical().apply {
+            background = rounded(Color.parseColor("#F2F4F7"))
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            incomeText = summaryRow(this, "수입", INCOME_COLOR)
+            expenseText = summaryRow(this, "지출", EXPENSE_COLOR)
+            balanceText = summaryRow(this, "남은 돈", Color.BLACK, big = true)
+        }, margins(top = 8))
+
+        // 알림 접근 권한 안내
+        permissionBanner = vertical().apply {
+            background = rounded(Color.parseColor("#FFF4E5"))
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            addView(text("카드 결제 자동 기록이 꺼져 있어요.\n'알림 접근'에서 이 앱을 허용해 주세요.", 14f))
+            addView(button("알림 접근 설정 열기") {
+                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            })
+        }
+        root.addView(permissionBanner, margins(top = 8))
+
+        // 입력 버튼
+        root.addView(horizontal().apply {
+            addView(button("+ 수입") { editEntry(null, Kind.INCOME) }, weight())
+            addView(button("+ 지출") { editEntry(null, Kind.EXPENSE) }, weight())
+            addView(button("문자 붙여넣기") { pasteMessage() }, weight())
+        }, margins(top = 8))
+
+        list = vertical()
+        root.addView(list, margins(top = 8))
+
+        return ScrollView(this).apply {
+            setBackgroundColor(Color.WHITE)
+            addView(root)
+        }
+    }
+
+    private fun refresh() {
+        monthLabel.text = "${month.year}년 ${month.monthValue}월"
+        permissionBanner.visibility = if (listenerEnabled()) View.GONE else View.VISIBLE
+
+        val entries = db.month(month)
+        val income = entries.filter { it.kind == Kind.INCOME }.sumOf { it.amount }
+        val expense = entries.filter { it.kind == Kind.EXPENSE }.sumOf { it.amount }
+        incomeText.text = won(income)
+        expenseText.text = won(expense)
+        balanceText.text = won(income - expense)
+
+        list.removeAllViews()
+        if (entries.isEmpty()) {
+            list.addView(text("이번 달 내역이 없어요.", 14f, Color.GRAY).apply {
+                setPadding(0, dp(24), 0, 0)
+                gravity = Gravity.CENTER
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            return
+        }
+        var lastDay = -1
+        for (e in entries) {
+            if (e.time.dayOfMonth != lastDay) {
+                lastDay = e.time.dayOfMonth
+                list.addView(text(e.time.format(DAY_HEADER), 13f, Color.GRAY, bold = true).apply {
+                    setPadding(0, dp(14), 0, dp(4))
+                })
+            }
+            list.addView(entryRow(e))
+        }
+    }
+
+    private fun entryRow(e: Entry): View = horizontal().apply {
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(0, dp(8), 0, dp(8))
+        setOnClickListener { editEntry(e, e.kind) }
+
+        val left = vertical()
+        left.addView(text(e.memo, 16f))
+        val sub = listOf(e.time.format(TIME), e.card, if (e.auto) "자동" else "").filter { it.isNotEmpty() }
+        left.addView(text(sub.joinToString(" · "), 12f, Color.GRAY))
+        addView(left, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+
+        val (sign, color) = when {
+            e.kind == Kind.INCOME -> "+" to INCOME_COLOR
+            e.amount < 0 -> "취소 " to Color.GRAY
+            else -> "-" to EXPENSE_COLOR
+        }
+        addView(text(sign + won(Math.abs(e.amount)), 16f, color, bold = true))
+    }
+
+    // ---------------------------------------------------------------- 입력/수정
+
+    private fun editEntry(existing: Entry?, kind: Kind, prefill: Entry? = null) {
+        val src = existing ?: prefill
+        val form = vertical().apply { setPadding(dp(20), dp(8), dp(20), 0) }
+
+        val amount = field(form, "금액 (원)", src?.amount?.toString() ?: "",
+            InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED)
+        val memo = field(form, if (kind == Kind.INCOME) "내용" else "사용처",
+            src?.memo ?: if (kind == Kind.INCOME) "월급" else "")
+        val card = if (kind == Kind.EXPENSE) field(form, "카드", src?.card ?: "") else null
+        val time = field(form, "날짜 (예: 2026-10-27 12:30)",
+            (src?.time ?: defaultTime()).format(INPUT_TIME))
+        if (src != null && src.raw.isNotEmpty()) {
+            form.addView(text("원본 알림\n${src.raw}", 12f, Color.GRAY).apply { setPadding(0, dp(12), 0, 0) })
+        }
+
+        val title = (if (existing == null) "추가: " else "수정: ") + if (kind == Kind.INCOME) "수입" else "지출"
+        val builder = AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(ScrollView(this).apply { addView(form) })
+            .setPositiveButton("저장", null)
+            .setNegativeButton("닫기", null)
+        if (existing != null) {
+            builder.setNeutralButton("삭제") { _, _ -> db.delete(existing.id); refresh() }
+        }
+        val dialog = builder.create()
+        dialog.setOnShowListener {
+            // 입력이 잘못되면 창을 닫지 않고 알려 준다
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val value = amount.text.toString().replace(",", "").trim().toLongOrNull()
+                val at = try {
+                    LocalDateTime.parse(time.text.toString().trim(), INPUT_TIME)
+                } catch (e: DateTimeParseException) {
+                    null
+                }
+                when {
+                    value == null || value == 0L -> toast("금액을 숫자로 입력해 주세요")
+                    at == null -> toast("날짜를 2026-10-27 12:30 형식으로 입력해 주세요")
+                    else -> {
+                        db.save(
+                            Entry(
+                                id = existing?.id ?: 0,
+                                kind = kind,
+                                amount = value,
+                                memo = memo.text.toString().trim().ifEmpty { if (kind == Kind.INCOME) "수입" else "지출" },
+                                card = card?.text?.toString()?.trim().orEmpty(),
+                                time = at,
+                                auto = existing?.auto ?: false,
+                                raw = src?.raw.orEmpty(),
+                            )
+                        )
+                        month = YearMonth.from(at)
+                        refresh()
+                        dialog.dismiss()
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    /** 자동 기록이 안 된 문자를 붙여 넣어 지출로 추가한다. 내 카드 문자가 잘 읽히는지 시험할 때도 쓴다. */
+    private fun pasteMessage() {
+        val input = EditText(this).apply {
+            hint = "카드 승인 문자나 알림 내용을 붙여 넣으세요"
+            minLines = 4
+            gravity = Gravity.TOP
+        }
+        AlertDialog.Builder(this)
+            .setTitle("문자 붙여넣기")
+            .setView(vertical().apply { setPadding(dp(20), dp(8), dp(20), 0); addView(input) })
+            .setPositiveButton("읽기") { _, _ ->
+                val raw = input.text.toString()
+                val p = CardMessageParser.parse(raw, LocalDateTime.now(), trustedSource = true)
+                if (p == null) {
+                    toast("카드 결제 문구를 찾지 못했어요")
+                } else {
+                    editEntry(
+                        null, Kind.EXPENSE,
+                        Entry(
+                            kind = Kind.EXPENSE,
+                            amount = if (p.isCancel) -p.amount else p.amount,
+                            memo = p.merchant,
+                            card = p.card,
+                            time = p.time ?: LocalDateTime.now(),
+                            raw = raw,
+                        ),
+                    )
+                }
+            }
+            .setNegativeButton("닫기", null)
+            .show()
+    }
+
+    // ---------------------------------------------------------------- 도우미
+
+    private fun listenerEnabled(): Boolean {
+        val me = ComponentName(this, CardNotificationListener::class.java).flattenToString()
+        val enabled = Settings.Secure.getString(contentResolver, "enabled_notification_listeners").orEmpty()
+        return enabled.split(':').any { it == me }
+    }
+
+    // 지난달을 보고 있으면 그 달 1일 정오를 기본값으로
+    private fun defaultTime(): LocalDateTime =
+        if (YearMonth.now() == month) LocalDateTime.now().withSecond(0).withNano(0)
+        else month.atDay(1).atTime(12, 0)
+
+    private fun summaryRow(parent: LinearLayout, label: String, color: Int, big: Boolean = false): TextView {
+        val size = if (big) 20f else 16f
+        val value = text("", size, color, bold = true).apply { gravity = Gravity.END }
+        parent.addView(horizontal().apply {
+            setPadding(0, dp(4), 0, dp(4))
+            addView(text(label, size), LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            addView(value)
+        })
+        return value
+    }
+
+    private fun field(parent: LinearLayout, label: String, value: String, type: Int = InputType.TYPE_CLASS_TEXT): EditText {
+        parent.addView(text(label, 12f, Color.GRAY).apply { setPadding(0, dp(10), 0, 0) })
+        return EditText(this).apply {
+            setText(value)
+            inputType = type
+            setSingleLine(true)
+            parent.addView(this)
+        }
+    }
+
+    private fun vertical() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+    private fun horizontal() = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+
+    private fun text(s: String, size: Float, color: Int = Color.BLACK, bold: Boolean = false) =
+        TextView(this).apply {
+            text = s
+            textSize = size
+            setTextColor(color)
+            if (bold) typeface = Typeface.DEFAULT_BOLD
+        }
+
+    private fun button(label: String, onClick: () -> Unit) =
+        Button(this).apply {
+            text = label
+            isAllCaps = false
+            setOnClickListener { onClick() }
+        }
+
+    private fun rounded(color: Int) = GradientDrawable().apply {
+        setColor(color)
+        cornerRadius = dp(12).toFloat()
+    }
+
+    private fun weight() = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)
+
+    private fun margins(top: Int) = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(top) }
+
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+
+    companion object {
+        private val INCOME_COLOR = Color.parseColor("#1E6FD9")
+        private val EXPENSE_COLOR = Color.parseColor("#D93025")
+        private val DAY_HEADER = DateTimeFormatter.ofPattern("M월 d일 (E)", java.util.Locale.KOREAN)
+        private val TIME = DateTimeFormatter.ofPattern("HH:mm")
+        private val INPUT_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+
+        fun won(v: Long) = "%,d원".format(v)
+    }
+}
