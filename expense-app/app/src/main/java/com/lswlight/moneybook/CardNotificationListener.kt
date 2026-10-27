@@ -20,13 +20,16 @@ class CardNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val pkg = sbn.packageName
         if (pkg == packageName) return
-        val trusted = isCardApp(pkg)
+        // 앱 이름에 "카드" 가 들어가면 (예: 하나Pay 의 "하나카드") 카드사 앱으로 본다
+        val label = appLabel(pkg)
+        val trusted = isCardApp(pkg) || label.contains("카드")
         if (!trusted && pkg !in MESSAGE_APPS) return
 
         val n = sbn.notification
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
 
-        val text = notificationText(n)
+        // 카드사 앱 알림은 제목이 "결제" 뿐이라, 앱 이름을 첫 줄로 붙여 카드사를 알 수 있게 한다
+        val text = notificationText(n).let { if (label.contains("카드")) "$label\n$it" else it }
         val posted = sbn.postTime.toLocalDateTime()
         val parsed = CardMessageParser.parse(text, posted, trusted)
         if (parsed == null) {
@@ -47,7 +50,7 @@ class CardNotificationListener : NotificationListenerService() {
             Entry(
                 kind = Kind.EXPENSE,
                 amount = amount,
-                memo = parsed.merchant,
+                memo = parsed.memo(),
                 card = parsed.card,
                 time = time,
                 auto = true,
@@ -55,8 +58,14 @@ class CardNotificationListener : NotificationListenerService() {
             )
         )
         Log.i(TAG, "자동 기록: ${parsed.merchant} $amount ($pkg)")
-        DetectLog.add(this, pkg, "기록됨: ${parsed.merchant} ${MainActivity.won(amount)}", text)
+        DetectLog.add(this, pkg, "기록됨: ${parsed.memo()} ${MainActivity.won(amount)}", text)
         main.post { LedgerDb.onChanged?.invoke() }
+    }
+
+    private fun appLabel(pkg: String): String = try {
+        packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+    } catch (e: Exception) {
+        ""
     }
 
     private fun notificationText(n: Notification): String {

@@ -123,6 +123,36 @@ class CardMessageParserTest {
     }
 
     @Test
+    fun hanaPayOverseasYen() {
+        // 하나카드 앱 알림 (앱 이름 "하나카드" 를 알림 서비스가 첫 줄로 붙여 준다)
+        val p = parse(
+            "하나카드\n결제\n(1*2*)이*우님 10/27 22:40/해외/승인/JPY 2,280/GOOGLE*YOUTUBEPREMIUM TOKYO      신용 결제로 처리되었습니다.",
+            trusted = true,
+        )!!
+        assertEquals("JPY 2,280", p.foreign)
+        assertEquals(Math.round(2280 * 9.3), p.amount)
+        assertEquals("GOOGLE*YOUTUBEPREMIUM TOKYO", p.merchant)
+        assertEquals("하나카드", p.card)
+        assertEquals(LocalDateTime.of(2026, 10, 27, 22, 40), p.time)
+        assertEquals("GOOGLE*YOUTUBEPREMIUM TOKYO (JPY 2,280, 환산 추정)", p.memo())
+    }
+
+    @Test
+    fun overseasUsdWithDecimals() {
+        val p = parse("[Web발신]\n신한카드(1234)해외승인 홍*동 USD 12.50 10/27 09:30 AMAZON.COM")!!
+        assertEquals(17500L, p.amount)
+        assertEquals("USD 12.50", p.foreign)
+        assertEquals("AMAZON.COM", p.merchant)
+    }
+
+    @Test
+    fun krwAmountWinsOverForeign() {
+        val p = parse("현대카드 해외승인 홍*동\nUSD 10.00 (원화 13,950원)\n10/27 09:30\nNETFLIX")!!
+        assertEquals(13950L, p.amount)
+        assertEquals("", p.foreign)
+    }
+
+    @Test
     fun ignoresNonPaymentMessages() {
         assertNull(parse("신한카드(1234) 승인거절 홍*동 12,500원 한도초과"))
         assertNull(parse("[신한카드] 11월 결제예정금액은 1,234,567원입니다"))

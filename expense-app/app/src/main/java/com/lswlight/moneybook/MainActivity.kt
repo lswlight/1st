@@ -240,7 +240,7 @@ class MainActivity : Activity() {
                         Entry(
                             kind = Kind.EXPENSE,
                             amount = if (p.isCancel) -p.amount else p.amount,
-                            memo = p.merchant,
+                            memo = p.memo(),
                             card = p.card,
                             time = p.time ?: LocalDateTime.now(),
                             raw = raw,

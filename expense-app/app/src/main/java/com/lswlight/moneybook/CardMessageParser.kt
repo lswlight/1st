@@ -9,7 +9,11 @@ data class ParsedPayment(
     val merchant: String,      // 가맹점 (못 찾으면 "카드 결제")
     val card: String,          // 카드사 (못 찾으면 빈 문자열)
     val time: LocalDateTime?,  // 메시지에 적힌 결제 시각 (없으면 null)
-)
+    val foreign: String = "",  // 해외 결제의 원래 금액 (예: "JPY 2,280"), 이때 amount 는 원화 환산 추정치
+) {
+    /** 내역에 남길 내용. 해외 결제면 원래 금액을 함께 적는다. */
+    fun memo() = if (foreign.isEmpty()) merchant else "$merchant ($foreign, 환산 추정)"
+}
 
 /**
  * 카드사 문자, 카카오톡 알림톡, 카드 앱 푸시 문구에서 금액·가맹점·카드사를 뽑는다.
@@ -24,6 +28,17 @@ object CardMessageParser {
     )
     // "삼성1234승인" 처럼 카드 단어 없이 카드사 이름 뒤에 카드번호가 붙는 문자
     private val CARD_SHORT = Regex("""(KB국민|국민|신한|현대|삼성|롯데|하나|우리|NH|농협|BC|씨티)\d""")
+    // 해외 결제 금액: "JPY 2,280", "USD 12.50"
+    private val FOREIGN = Regex("""(?<![A-Z])(USD|JPY|EUR|CNY|GBP|HKD|SGD|AUD|CAD|CHF|THB|VND|TWD|PHP|NZD|MYR|IDR)\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)""")
+
+    // 외화 1단위당 대략적인 원화 (인터넷 권한이 없어 실시간 환율 대신 쓰는 추정치)
+    private val KRW_PER_UNIT = mapOf(
+        "USD" to 1400.0, "JPY" to 9.3, "EUR" to 1600.0, "CNY" to 195.0, "GBP" to 1850.0,
+        "HKD" to 180.0, "SGD" to 1080.0, "AUD" to 920.0, "CAD" to 1010.0, "CHF" to 1750.0,
+        "THB" to 42.0, "VND" to 0.055, "TWD" to 45.0, "PHP" to 24.0, "NZD" to 830.0,
+        "MYR" to 330.0, "IDR" to 0.085,
+    )
+
     private val MERCHANT_LABEL = Regex("""(?:이용가맹점|가맹점명|가맹점|사용처|이용처)\s*[:：]?\s*([^\n]+)""")
     private val TOSS_STYLE = Regex("""^(.+?)에서\s*[\d,]+\s*원""", RegexOption.MULTILINE)
 
@@ -46,7 +61,10 @@ object CardMessageParser {
         if (!PAYMENT_WORD.containsMatchIn(body)) return null
         if (!trustedSource && !CARD_CONTEXT.containsMatchIn(body) && !CARD_SHORT.containsMatchIn(body)) return null
 
-        val amount = findAmount(body) ?: return null
+        // 원화 금액이 있으면 그대로, 없으면 외화 금액을 원화로 환산한다
+        val krw = findAmount(body)
+        val foreign = if (krw == null) FOREIGN.find(body) else null
+        val amount = krw ?: foreign?.let { toKrw(it.groupValues[1], it.groupValues[2]) } ?: return null
         val card = (CARD.find(body) ?: CARD_SHORT.find(body))?.let { normalizeCard(it.groupValues[1]) }
             ?: if (body.contains("[KB]")) "KB국민카드" else ""
 
@@ -56,7 +74,14 @@ object CardMessageParser {
             merchant = findMerchant(body).ifEmpty { "카드 결제" },
             card = card,
             time = findTime(body, now),
+            foreign = foreign?.let { "${it.groupValues[1]} ${it.groupValues[2]}" }.orEmpty(),
         )
+    }
+
+    private fun toKrw(currency: String, value: String): Long? {
+        val v = value.replace(",", "").toDoubleOrNull() ?: return null
+        val krw = Math.round(v * (KRW_PER_UNIT[currency] ?: return null))
+        return if (krw > 0) krw else null
     }
 
     private fun findAmount(body: String): Long? {
@@ -102,13 +127,17 @@ object CardMessageParser {
         Regex("""\d{1,2}[/.]\d{1,2}"""),          // 날짜만 있는 경우
         Regex("""\d{1,2}:\d{2}(:\d{2})?"""),       // 시각만 있는 경우
         AMOUNT,
+        FOREIGN,
         Regex("""\(?일시불\)?|\(?\d+\s*개월\)?|할부|전자금융"""),
         Regex("""\S*(카드|체크)\S*"""),              // 신한카드(1234)승인
         Regex("""\S*${CARD_SHORT.pattern}\S*"""),  // 삼성1234승인
-        Regex("""\S*\*\S*"""),                     // 홍*동님, 1*2*
+        Regex("""\(?\d+\*[\d*]*\)?"""),            // 카드번호 1*2*, (1*2*)
+        Regex("""\S*[가-힣]\*[가-힣]?\S*"""),          // 홍*동님 (GOOGLE*YOUTUBE 같은 가맹점은 남긴다)
         Regex("""\S+님"""),
+        Regex("""결제로\s*처리되었습니다|처리되었습니다|해외|국내|신용"""),
         Regex("""승인|취소|사용|결제|완료|되었습니다|했어요"""),
         Regex("""\(\d*\)"""),
+        Regex("""/"""),                            // 하나카드 앱: "해외/승인/JPY 2,280/가맹점"
     )
 
     private fun clean(s: String): String {
