@@ -250,6 +250,19 @@ class CardMessageParserTest {
     }
 
     @Test
+    fun bankWithdrawalForwardedByKakao() {
+        // 카카오톡으로 받은 은행 출금 문구 (제목은 보낸 사람 이름) — 카드 단어가 없어도 은행+출금+잔액이면 인정
+        val p = parse("graft\nMG새마을금고 [출금] 18,500원 9003-2963-****-1 잔액 393,639원 10/28 11:44 양천돈까스")!!
+        assertEquals(18500L, p.amount)
+        assertEquals("양천돈까스", p.merchant)
+    }
+
+    @Test
+    fun chatAboutBankIsIgnored() {
+        assertNull(parse("친구\n은행 가서 출금 50,000원 했어"))
+    }
+
+    @Test
     fun ignoresNonPaymentMessages() {
         assertNull(parse("신한카드(1234) 승인거절 홍*동 12,500원 한도초과"))
         assertNull(parse("[신한카드] 11월 결제예정금액은 1,234,567원입니다"))

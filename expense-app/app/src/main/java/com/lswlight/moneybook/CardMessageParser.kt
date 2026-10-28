@@ -67,6 +67,11 @@ object CardMessageParser {
     private val EXCLUDE = Regex("""승인\s*거절|거절|결제\s*예정|결제\s*대금|청구\s*금액|명세서|연체|이용\s*대금|출금\s*예정|\(광고\)|인증번호|\[입금]|입금되었습니다""")
     // 출금: 은행 앱의 체크카드·계좌 출금 알림 (예: MG새마을금고 "[출금] 18,500원 ... 양천돈까스")
     private val PAYMENT_WORD = Regex("""승인|결제|사용|일시불|할부|취소|출금""")
+    // 은행 출금 알림 (문자·카카오톡으로 받은 경우): 은행 이름 + 출금 + 잔액이 모두 있어야 인정 (일반 대화와 구분)
+    private val BANK_NAME = Regex("""은행|금고|뱅크|신협|우체국|농협|수협""")
+    private fun isBankWithdrawal(body: String) =
+        BANK_NAME.containsMatchIn(body) && body.contains("출금") && body.contains("잔액")
+
     private val CARD_CONTEXT = Regex("""카드|체크|\[KB]|[Pp]ay|페이""")
 
     /**
@@ -88,7 +93,7 @@ object CardMessageParser {
         // "승인/결제" 단어가 없어도 "캐시백 -2,000원" 처럼 - 붙은 혜택 금액이면 인정한다
         val benefitNotice = BENEFIT_WORD.containsMatchIn(body) && MINUS_AMOUNT.containsMatchIn(body)
         if (!PAYMENT_WORD.containsMatchIn(body) && !benefitNotice) return null
-        if (!trustedSource && !CARD_CONTEXT.containsMatchIn(body) && !CARD_SHORT.containsMatchIn(body)) return null
+        if (!trustedSource && !CARD_CONTEXT.containsMatchIn(body) && !CARD_SHORT.containsMatchIn(body) && !isBankWithdrawal(body)) return null
 
         // 원화 금액이 있으면 그대로, 없으면 외화 금액을 원화로 환산한다
         val (krw, minus) = findAmount(body) ?: (null to false)
