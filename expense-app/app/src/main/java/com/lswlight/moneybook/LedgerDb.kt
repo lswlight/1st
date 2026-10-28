@@ -83,6 +83,16 @@ class LedgerDb(context: Context) : SQLiteOpenHelper(context, "moneybook.db", nul
         ).isNotEmpty()
     }
 
+    /** 앞뒤 [minutes]분 안의 같은 금액 자동 지출 중 은행 출금 알림으로 기록된 것 (내 계좌 간 이체 후보). */
+    fun recentAutoWithdrawals(amount: Long, time: LocalDateTime, minutes: Long = 5): List<Entry> {
+        val t = time.toMillis()
+        val window = minutes * 60 * 1000L
+        return query(
+            "auto = 1 AND kind = ? AND amount = ? AND time BETWEEN ? AND ? AND raw LIKE ?",
+            arrayOf(Kind.EXPENSE.name, amount.toString(), (t - window).toString(), (t + window).toString(), "%출금%"),
+        )
+    }
+
     private fun query(where: String, args: Array<String>): List<Entry> {
         val out = mutableListOf<Entry>()
         readableDatabase.query("entries", null, where, args, null, null, "time DESC, id DESC").use { c ->

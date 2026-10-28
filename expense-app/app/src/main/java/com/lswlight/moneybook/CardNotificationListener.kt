@@ -50,6 +50,22 @@ class CardNotificationListener : NotificationListenerService() {
     }
 
     private fun record(pkg: String, text: String, posted: LocalDateTime, trusted: Boolean, label: String) {
+        // 입금 알림: 기록하지 않지만, 같은 금액의 출금이 앞뒤 5분 안에 있으면 내 계좌끼리 옮긴 돈이므로 그 출금 기록을 지운다
+        // (일반 대화와 섞이지 않게 은행·카드 앱 알림이거나 잔액이 적힌 은행 문구일 때만)
+        val deposit = CardMessageParser.depositAmount(text)?.takeIf { trusted || text.contains("잔액") }
+        if (deposit != null) {
+            recentDeposits.removeAll { Duration.between(it.second, posted).abs().toMinutes() > 10 }
+            recentDeposits += deposit to posted
+            val db = LedgerDb.get(this)
+            val matched = db.recentAutoWithdrawals(deposit, posted)
+            if (matched.isNotEmpty()) {
+                matched.forEach { db.delete(it.id) }
+                DetectLog.add(this, pkg, "내 계좌 간 이체로 보고 출금 기록 ${matched.size}건 삭제", text)
+                main.post { LedgerDb.onChanged?.invoke() }
+            }
+            return
+        }
+
         val fee = ExchangeRates.feePercent(this)
         var parsed = CardMessageParser.parse(text, posted, trusted, ExchangeRates.cached(this), fee)
         // 해외 결제인데 오늘 환율을 아직 안 받았으면 받아서 다시 계산한다 (하루 한 번, 실패하면 저장된 값 사용)
@@ -59,6 +75,14 @@ class CardNotificationListener : NotificationListenerService() {
         if (parsed == null) {
             // 금액처럼 보이는 게 있는 알림만 남긴다 (일반 카톡 대화로 기록이 금방 밀려나지 않게)
             if (MONEY_LIKE.containsMatchIn(text)) DetectLog.add(this, pkg, "결제 문구 아님", text)
+            return
+        }
+
+        // 같은 금액의 입금 알림이 먼저 와 있으면 내 계좌 간 이체 (은행 출금 알림만 해당)
+        if (text.contains("출금") && !parsed.isCancel &&
+            recentDeposits.any { it.first == parsed.amount && Duration.between(it.second, posted).abs().toMinutes() <= 5 }
+        ) {
+            DetectLog.add(this, pkg, "같은 금액 입금이 있어 내 계좌 간 이체로 보고 건너뜀", text)
             return
         }
 
@@ -139,6 +163,9 @@ class CardNotificationListener : NotificationListenerService() {
         private val BANK_LABEL = Regex("""은행|뱅크|뱅킹|금고|신협|우체국|원큐""")
 
         private val MONEY_LIKE = Regex("""\d\s*원|${CardMessageParser.CURRENCIES.joinToString("|")}""")
+
+        // 최근 입금 (금액, 시각). 작업 스레드 하나에서만 다룬다
+        private val recentDeposits = mutableListOf<Pair<Long, LocalDateTime>>()
 
         /** 시스템이 이 서비스에 알림을 보내 주는 중인지 (화면의 상태 표시용). */
         @Volatile var connected = false

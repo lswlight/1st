@@ -122,6 +122,18 @@ object CardMessageParser {
         )
     }
 
+    /**
+     * 은행 입금 알림이면 입금 금액, 아니면 null. (입금은 기록하지 않지만,
+     * 같은 금액의 출금과 짝을 지어 "내 계좌끼리 옮긴 돈" 을 알아내는 데 쓴다)
+     */
+    fun depositAmount(text: String): Long? {
+        val body = text.replace("\r", "")
+        if (!DEPOSIT.containsMatchIn(body) || body.contains("출금")) return null
+        return findAmount(body)?.first
+    }
+
+    private val DEPOSIT = Regex("""\[입금]|입금되었습니다|입금\s+\d""")
+
     private fun toKrw(value: String, krwPerUnit: Double): Long? {
         val v = value.replace(",", "").toDoubleOrNull() ?: return null
         val krw = Math.round(v * krwPerUnit)
@@ -170,6 +182,7 @@ object CardMessageParser {
     private val CLEAN_PATTERNS = listOf(
         Regex("""\[[^\]]*]"""),                    // [Web발신], [신한카드]
         Regex("""(누적|잔액|총누적).*"""),           // 누적 1,234,567원 이후 전부
+        Regex("""\d[\d*]*(?:-[\d*]+)+\S*"""),        // 계좌번호 1002-938-235***계좌, 9003-2963-****-1
         DATE_TIME,
         FOREIGN,                                   // "USD 9.99" 가 날짜 규칙에 먹히기 전에 지운다
         Regex("""\d{1,2}[/.]\d{1,2}"""),          // 날짜만 있는 경우

@@ -276,6 +276,20 @@ class CardMessageParserTest {
     }
 
     @Test
+    fun wooriWithdrawalMerchantWithoutAccountNumber() {
+        val p = parse("우리WON뱅킹 입출금알림\n[출금] 금고이상우 10,000원 1002-938-235***계좌 잔액 71,863원 10/28 12:46", trusted = true)!!
+        assertEquals(10000L, p.amount)
+        assertEquals("금고이상우", p.merchant)
+    }
+
+    @Test
+    fun depositAmount() {
+        assertEquals(10000L, CardMessageParser.depositAmount("MG새마을금고\n[입금] 10,000원 9003-2963-****-1 잔액 403,639원 10/28 12:46 이상우"))
+        assertNull(CardMessageParser.depositAmount("우리WON뱅킹 입출금알림\n[출금] 금고이상우 10,000원 잔액 71,863원"))
+        assertNull(CardMessageParser.depositAmount("신한카드(1234)승인 홍*동 12,500원"))
+    }
+
+    @Test
     fun ignoresNonPaymentMessages() {
         assertNull(parse("신한카드(1234) 승인거절 홍*동 12,500원 한도초과"))
         assertNull(parse("[신한카드] 11월 결제예정금액은 1,234,567원입니다"))
