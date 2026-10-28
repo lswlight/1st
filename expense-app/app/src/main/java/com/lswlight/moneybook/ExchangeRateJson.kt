@@ -9,7 +9,8 @@ package com.lswlight.moneybook
  *  - @fawazahmed0/currency-api krw.json   → {"date":"...","krw":{"jpy":0.107,...}}
  */
 object ExchangeRateJson {
-    private val BLOCK = Regex(""""(rates|krw)"\s*:\s*\{([^}]*)}""")
+    // 안드로이드 정규식(ICU)은 짝 없는 } 를 문법 오류로 보므로 반드시 \} 로 쓴다
+    private val BLOCK = Regex(""""(rates|krw)"\s*:\s*\{([^}]*)\}""")
     private val PAIR = Regex(""""([A-Za-z]{3})"\s*:\s*([0-9.eE+-]+)""")
 
     fun krwPerUnit(json: String): Map<String, Double> {

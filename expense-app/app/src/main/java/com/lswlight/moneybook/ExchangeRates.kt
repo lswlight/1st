@@ -51,7 +51,7 @@ object ExchangeRates {
         for (source in SOURCES) {
             val rates = try {
                 ExchangeRateJson.krwPerUnit(download(source))
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Log.w(TAG, "환율 받기 실패: $source", e)
                 continue
             }

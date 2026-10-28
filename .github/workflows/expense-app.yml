@@ -63,10 +63,23 @@ jobs:
   install-test:
     needs: build
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: expense-app
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: moneybook-apk
+          path: expense-app
 
       - name: KVM 사용 설정
         run: |
@@ -74,14 +87,16 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: 에뮬레이터 설치·실행 테스트
+      - name: 에뮬레이터 설치·실행 테스트 + 기기 위 해석기 테스트
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
           arch: x86_64
           target: google_apis
+          working-directory: expense-app
           script: |
             adb install -r app-debug.apk
             adb shell am start -W -n com.lswlight.moneybook/.MainActivity
             sleep 5
             adb shell pidof com.lswlight.moneybook
+            ./gradlew connectedDebugAndroidTest --stacktrace

@@ -11,8 +11,9 @@ android {
         applicationId = "com.lswlight.moneybook"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.6"
+        versionCode = 8
+        versionName = "1.7"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -39,4 +40,7 @@ kotlin {
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    // 실제 안드로이드(에뮬레이터)에서 정규식 등을 검증하는 테스트용. 앱 APK 에는 들어가지 않는다
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }
