@@ -36,7 +36,15 @@ class CardNotificationListener : NotificationListenerService() {
         // 카드사 앱 알림은 제목이 "결제" 뿐이라, 앱 이름을 첫 줄로 붙여 카드사를 알 수 있게 한다
         val text = notificationText(n).let { if (label.contains("카드")) "$label\n$it" else it }
         val posted = sbn.postTime.toLocalDateTime()
-        worker.execute { record(pkg, text, posted, trusted) }
+        worker.execute {
+            try {
+                record(pkg, text, posted, trusted)
+            } catch (e: Exception) {
+                // 처리 중 오류가 나도 조용히 사라지지 않게 감지 기록에 남긴다
+                Log.e(TAG, "알림 처리 실패", e)
+                DetectLog.add(this, pkg, "처리 오류: ${e.javaClass.simpleName} ${e.message.orEmpty()}", text)
+            }
+        }
     }
 
     private fun record(pkg: String, text: String, posted: LocalDateTime, trusted: Boolean) {

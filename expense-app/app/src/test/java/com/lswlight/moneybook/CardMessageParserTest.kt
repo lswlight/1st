@@ -193,6 +193,18 @@ class CardMessageParserTest {
     }
 
     @Test
+    fun kakaoForwardedOverseasUsd() {
+        // 카카오톡으로 받은 해외 결제 문구 (제목은 보낸 사람 이름)
+        val p = CardMessageParser.parse(
+            "홍길동\n하나카드 결제 (1*2*)이*우님 10/28 09:40/해외/승인/USD 9.99/NETFLIX.COM 신용 결제로 처리되었습니다.",
+            now, rates = mapOf("USD" to 1430.0), feePercent = 2.0,
+        )!!
+        assertEquals("NETFLIX.COM", p.merchant)
+        assertEquals(Math.round(9.99 * 1430.0 * 1.02), p.amount)
+        assertEquals("NETFLIX.COM (USD 9.99 × 1,430.00원 + 수수료 2%, 추정)", p.memo())
+    }
+
+    @Test
     fun ignoresNonPaymentMessages() {
         assertNull(parse("신한카드(1234) 승인거절 홍*동 12,500원 한도초과"))
         assertNull(parse("[신한카드] 11월 결제예정금액은 1,234,567원입니다"))

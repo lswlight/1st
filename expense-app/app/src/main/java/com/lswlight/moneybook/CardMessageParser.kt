@@ -17,7 +17,7 @@ data class ParsedPayment(
     fun memo(): String {
         if (foreign.isEmpty()) return merchant
         val fee = if (feePercent > 0) " + 수수료 ${"%.2f".format(feePercent).trimEnd('0').trimEnd('.')}%" else ""
-        return "$merchant ($foreign × ${"%.2f".format(rate)}원$fee, 추정)"
+        return "$merchant ($foreign × ${"%,.2f".format(rate)}원$fee, 추정)"
     }
 }
 
@@ -145,10 +145,10 @@ object CardMessageParser {
         Regex("""\[[^\]]*]"""),                    // [Web발신], [신한카드]
         Regex("""(누적|잔액|총누적).*"""),           // 누적 1,234,567원 이후 전부
         DATE_TIME,
+        FOREIGN,                                   // "USD 9.99" 가 날짜 규칙에 먹히기 전에 지운다
         Regex("""\d{1,2}[/.]\d{1,2}"""),          // 날짜만 있는 경우
         Regex("""\d{1,2}:\d{2}(:\d{2})?"""),       // 시각만 있는 경우
         AMOUNT,
-        FOREIGN,
         Regex("""\(?일시불\)?|\(?\d+\s*개월\)?|할부|전자금융"""),
         Regex("""\S*(카드|체크)\S*"""),              // 신한카드(1234)승인
         Regex("""\S*${CARD_SHORT.pattern}\S*"""),  // 삼성1234승인
