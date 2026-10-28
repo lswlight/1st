@@ -9,6 +9,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.provider.Settings
+import android.service.notification.NotificationListenerService
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
@@ -36,6 +37,7 @@ class MainActivity : Activity() {
     private lateinit var expenseText: TextView
     private lateinit var balanceText: TextView
     private lateinit var permissionBanner: LinearLayout
+    private lateinit var statusText: TextView
     private lateinit var list: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -47,6 +49,11 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         LedgerDb.onChanged = { refresh() }
+        // 알림 접근은 켜져 있는데 감지 서비스가 연결돼 있지 않으면 (앱 업데이트 직후 등) 다시 연결을 요청한다
+        if (listenerEnabled() && !CardNotificationListener.connected) {
+            NotificationListenerService.requestRebind(ComponentName(this, CardNotificationListener::class.java))
+            monthLabel.postDelayed({ refresh() }, 2000)
+        }
         refresh()
     }
 
@@ -77,6 +84,9 @@ class MainActivity : Activity() {
             expenseText = summaryRow(this, "지출", EXPENSE_COLOR)
             balanceText = summaryRow(this, "남은 돈", Color.BLACK, big = true)
         }, margins(top = 8))
+
+        statusText = text("", 12f, Color.GRAY).apply { setPadding(dp(4), dp(6), 0, 0) }
+        root.addView(statusText)
 
         // 알림 접근 권한 안내
         permissionBanner = vertical().apply {
@@ -112,7 +122,14 @@ class MainActivity : Activity() {
 
     private fun refresh() {
         monthLabel.text = "${month.year}년 ${month.monthValue}월"
-        permissionBanner.visibility = if (listenerEnabled()) View.GONE else View.VISIBLE
+        val enabled = listenerEnabled()
+        permissionBanner.visibility = if (enabled) View.GONE else View.VISIBLE
+        statusText.text = when {
+            !enabled -> "자동 감지: 꺼짐"
+            CardNotificationListener.connected -> "자동 감지: 동작 중 ●"
+            else -> "자동 감지: 연결 안 됨 — 계속 이 상태면 알림 접근을 껐다가 다시 켜 주세요"
+        }
+        statusText.setTextColor(if (enabled && CardNotificationListener.connected) INCOME_COLOR else EXPENSE_COLOR)
 
         val entries = db.month(month)
         val income = entries.filter { it.kind == Kind.INCOME }.sumOf { it.amount }

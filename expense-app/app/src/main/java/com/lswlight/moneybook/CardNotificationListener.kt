@@ -1,6 +1,7 @@
 package com.lswlight.moneybook
 
 import android.app.Notification
+import android.content.ComponentName
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -84,6 +85,16 @@ class CardNotificationListener : NotificationListenerService() {
         main.post { LedgerDb.onChanged?.invoke() }
     }
 
+    override fun onListenerConnected() {
+        connected = true
+    }
+
+    // 앱 업데이트 등으로 시스템과 연결이 끊기면 다시 붙여 달라고 요청한다
+    override fun onListenerDisconnected() {
+        connected = false
+        requestRebind(ComponentName(this, CardNotificationListener::class.java))
+    }
+
     override fun onDestroy() {
         worker.shutdown()
         super.onDestroy()
@@ -113,6 +124,9 @@ class CardNotificationListener : NotificationListenerService() {
 
     companion object {
         private const val TAG = "MoneyBook"
+
+        /** 시스템이 이 서비스에 알림을 보내 주는 중인지 (화면의 상태 표시용). */
+        @Volatile var connected = false
 
         /** 문자 앱과 카카오톡: 카드사 문구일 때만 기록한다. */
         val MESSAGE_APPS = setOf(
