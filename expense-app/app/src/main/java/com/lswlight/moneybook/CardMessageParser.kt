@@ -64,8 +64,9 @@ object CardMessageParser {
     private val NOT_PAYMENT_PREFIX = Regex("""(누적|잔액|한도|포인트|적립|캐시백|할인|청구)[^\n\d]{0,6}$""")
 
     // 결제가 아닌 안내 문자 (거절, 청구서, 광고 등)
-    private val EXCLUDE = Regex("""승인\s*거절|거절|결제\s*예정|결제\s*대금|청구\s*금액|명세서|연체|이용\s*대금|출금\s*예정|\(광고\)|인증번호""")
-    private val PAYMENT_WORD = Regex("""승인|결제|사용|일시불|할부|취소""")
+    private val EXCLUDE = Regex("""승인\s*거절|거절|결제\s*예정|결제\s*대금|청구\s*금액|명세서|연체|이용\s*대금|출금\s*예정|\(광고\)|인증번호|\[입금]|입금되었습니다""")
+    // 출금: 은행 앱의 체크카드·계좌 출금 알림 (예: MG새마을금고 "[출금] 18,500원 ... 양천돈까스")
+    private val PAYMENT_WORD = Regex("""승인|결제|사용|일시불|할부|취소|출금""")
     private val CARD_CONTEXT = Regex("""카드|체크|\[KB]|[Pp]ay|페이""")
 
     /**

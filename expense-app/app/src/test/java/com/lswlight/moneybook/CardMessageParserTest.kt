@@ -235,6 +235,21 @@ class CardMessageParserTest {
     }
 
     @Test
+    fun mgBankAppWithdrawal() {
+        // MG새마을금고 앱 알림 (체크카드 결제가 계좌 출금으로 옴)
+        val p = parse("MG새마을금고\n[출금] 18,500원 9003-2963-****-1 잔액 393,639원 10/28 11:44 양천돈까스", trusted = true)!!
+        assertEquals(18500L, p.amount)
+        assertEquals("양천돈까스", p.merchant)
+        assertEquals(LocalDateTime.of(2026, 10, 28, 11, 44), p.time)
+        assertEquals(false, p.isBenefit)
+    }
+
+    @Test
+    fun bankDepositIsIgnored() {
+        assertNull(parse("MG새마을금고\n[입금] 3,000,000원 9003-2963-****-1 잔액 3,393,639원 10/25 09:00 (주)회사", trusted = true))
+    }
+
+    @Test
     fun ignoresNonPaymentMessages() {
         assertNull(parse("신한카드(1234) 승인거절 홍*동 12,500원 한도초과"))
         assertNull(parse("[신한카드] 11월 결제예정금액은 1,234,567원입니다"))

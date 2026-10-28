@@ -26,9 +26,10 @@ class CardNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val pkg = sbn.packageName
         if (pkg == packageName) return
-        // 앱 이름에 "카드" 가 들어가면 (예: 하나Pay 의 "하나카드") 카드사 앱으로 본다
+        // 앱 이름에 "카드" 가 들어가면 (예: 하나Pay 의 "하나카드") 카드사 앱,
+        // "은행·뱅크·금고" 등이 들어가면 (예: MG새마을금고) 은행 앱으로 보고 출금 알림을 기록한다
         val label = appLabel(pkg)
-        val trusted = isCardApp(pkg) || label.contains("카드")
+        val trusted = isCardApp(pkg) || label.contains("카드") || BANK_LABEL.containsMatchIn(label)
         if (!trusted && pkg !in MESSAGE_APPS) return
 
         val n = sbn.notification
@@ -39,7 +40,7 @@ class CardNotificationListener : NotificationListenerService() {
         val posted = sbn.postTime.toLocalDateTime()
         worker.execute {
             try {
-                record(pkg, text, posted, trusted)
+                record(pkg, text, posted, trusted, label)
             } catch (e: Throwable) {
                 // 처리 중 오류가 나도 조용히 사라지거나 앱이 죽지 않게 감지 기록에 남긴다
                 Log.e(TAG, "알림 처리 실패", e)
@@ -48,7 +49,7 @@ class CardNotificationListener : NotificationListenerService() {
         }
     }
 
-    private fun record(pkg: String, text: String, posted: LocalDateTime, trusted: Boolean) {
+    private fun record(pkg: String, text: String, posted: LocalDateTime, trusted: Boolean, label: String) {
         val fee = ExchangeRates.feePercent(this)
         var parsed = CardMessageParser.parse(text, posted, trusted, ExchangeRates.cached(this), fee)
         // 해외 결제인데 오늘 환율을 아직 안 받았으면 받아서 다시 계산한다 (하루 한 번, 실패하면 저장된 값 사용)
@@ -77,7 +78,8 @@ class CardNotificationListener : NotificationListenerService() {
                 kind = kind,
                 amount = amount,
                 memo = parsed.memo(),
-                card = parsed.card,
+                // 문구에 카드사가 없으면 알림 보낸 앱 이름 (예: MG새마을금고)
+                card = parsed.card.ifEmpty { if (trusted) label else "" },
                 time = time,
                 auto = true,
                 raw = text,
@@ -127,6 +129,8 @@ class CardNotificationListener : NotificationListenerService() {
 
     companion object {
         private const val TAG = "MoneyBook"
+
+        private val BANK_LABEL = Regex("""은행|뱅크|뱅킹|금고|신협|우체국|원큐""")
 
         private val MONEY_LIKE = Regex("""\d\s*원|${CardMessageParser.CURRENCIES.joinToString("|")}""")
 
