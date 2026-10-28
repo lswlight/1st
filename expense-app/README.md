@@ -49,6 +49,11 @@
 해석 규칙은 [`CardMessageParser.kt`](app/src/main/java/com/lswlight/moneybook/CardMessageParser.kt), 테스트 예시 문구는 [`CardMessageParserTest.kt`](app/src/test/java/com/lswlight/moneybook/CardMessageParserTest.kt) 에 있습니다.
 내 카드 문자가 잘 안 읽히면 그 문구를 테스트에 추가하고 규칙을 고치면 됩니다.
 
+## 가족 공유용 설치 가이드
+
+- 다운로드 링크 (항상 최신 버전): https://github.com/lswlight/1st/releases/download/moneybook-latest/moneybook.apk
+- 그림 가이드 3장 (QR 포함): [1. 다운로드·설치](docs/install-guide-1.png) · [2. 설치가 막힐 때](docs/install-guide-2.png) · [3. 처음 설정](docs/install-guide-3.png)
+
 ## 설치 (폰)
 
 1. 이 저장소의 **Releases → `moneybook-latest`** 에서 `moneybook.apk` 를 폰으로 받습니다.
