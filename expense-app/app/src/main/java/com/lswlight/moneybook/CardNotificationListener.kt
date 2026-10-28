@@ -56,7 +56,8 @@ class CardNotificationListener : NotificationListenerService() {
             parsed = CardMessageParser.parse(text, posted, trusted, ExchangeRates.cached(this), fee)
         }
         if (parsed == null) {
-            DetectLog.add(this, pkg, "결제 문구 아님", text)
+            // 금액처럼 보이는 게 있는 알림만 남긴다 (일반 카톡 대화로 기록이 금방 밀려나지 않게)
+            if (MONEY_LIKE.containsMatchIn(text)) DetectLog.add(this, pkg, "결제 문구 아님", text)
             return
         }
 
@@ -124,6 +125,8 @@ class CardNotificationListener : NotificationListenerService() {
 
     companion object {
         private const val TAG = "MoneyBook"
+
+        private val MONEY_LIKE = Regex("""\d\s*원|${CardMessageParser.CURRENCIES.joinToString("|")}""")
 
         /** 시스템이 이 서비스에 알림을 보내 주는 중인지 (화면의 상태 표시용). */
         @Volatile var connected = false

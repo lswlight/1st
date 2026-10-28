@@ -12,7 +12,7 @@ import java.time.LocalDateTime
 object DetectLog {
     private const val PREFS = "detect_log"
     private const val KEY = "items"
-    private const val MAX = 30
+    private const val MAX = 50
 
     data class Item(val time: LocalDateTime, val app: String, val result: String, val text: String)
 
