@@ -40,8 +40,8 @@ class CardNotificationListener : NotificationListenerService() {
         worker.execute {
             try {
                 record(pkg, text, posted, trusted)
-            } catch (e: Exception) {
-                // 처리 중 오류가 나도 조용히 사라지지 않게 감지 기록에 남긴다
+            } catch (e: Throwable) {
+                // 처리 중 오류가 나도 조용히 사라지거나 앱이 죽지 않게 감지 기록에 남긴다
                 Log.e(TAG, "알림 처리 실패", e)
                 DetectLog.add(this, pkg, "처리 오류: ${e.javaClass.simpleName} ${e.message.orEmpty()}", text)
             }
