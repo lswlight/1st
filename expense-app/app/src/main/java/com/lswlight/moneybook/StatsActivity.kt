@@ -12,6 +12,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
@@ -44,7 +45,17 @@ class StatsActivity : Activity() {
         intent.getStringExtra(EXTRA_MONTH)?.let { month = YearMonth.parse(it) }
         showGraph = intent.getBooleanExtra(EXTRA_GRAPH, false)
         title = "달력 · 그래프"
+        // 제목 줄 왼쪽 ← 버튼으로 메인 화면으로 돌아간다
+        actionBar?.setDisplayHomeAsUpEnabled(true)
         setContentView(buildLayout())
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (item.itemId == android.R.id.home) {
+            finish()
+            return true
+        }
+        return super.onOptionsItemSelected(item)
     }
 
     override fun onResume() {
@@ -69,6 +80,7 @@ class StatsActivity : Activity() {
         }, margins(top = 4))
         content = vertical()
         root.addView(content, margins(top = 8))
+        root.addView(button("← 메인 화면으로 돌아가기") { finish() }, margins(top = 20))
         return ScrollView(this).apply {
             setBackgroundColor(Color.WHITE)
             addView(root)
@@ -334,10 +346,14 @@ class MonthCalendarView(context: Context) : View(context) {
 
             // 지출 금액
             if (spent != 0L) {
+                val label = StatsActivity.compact(spent)
                 paint.textAlign = Paint.Align.RIGHT
                 paint.textSize = 11 * density
+                val room = rect.width() - 8 * density
+                val w = paint.measureText(label)
+                if (w > room) paint.textSize *= room / w
                 paint.color = Color.parseColor("#7A1A12")
-                canvas.drawText(StatsActivity.compact(spent), rect.right - 4 * density, rect.bottom - 7 * density, paint)
+                canvas.drawText(label, rect.right - 4 * density, rect.bottom - 7 * density, paint)
             }
         }
     }

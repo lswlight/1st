@@ -37,12 +37,10 @@ class StatsScreenshotTest {
         db.save(Entry(kind = Kind.EXPENSE, amount = 120_000, memo = "지난달 쇼핑", card = "하나카드", time = ym.minusMonths(1).atDay(10).atTime(12, 0)))
         db.save(Entry(kind = Kind.INCOME, amount = 4_800_000, memo = "월급", time = ym.minusMonths(1).atDay(25).atTime(9, 0)))
 
-        for ((name, graph) in listOf("calendar" to false, "graph" to true)) {
-            val act = instr.startActivitySync(
-                Intent(ctx, StatsActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    .putExtra(StatsActivity.EXTRA_GRAPH, graph)
-            )
+        for (name in listOf("main", "calendar", "graph")) {
+            val intent = if (name == "main") Intent(ctx, MainActivity::class.java)
+            else Intent(ctx, StatsActivity::class.java).putExtra(StatsActivity.EXTRA_GRAPH, name == "graph")
+            val act = instr.startActivitySync(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             instr.waitForIdleSync()
             Thread.sleep(1500)
             instr.uiAutomation.executeShellCommand("screencap -p /data/local/tmp/stats-$name.png").use { pfd ->

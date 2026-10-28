@@ -15,7 +15,7 @@
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="자동가계부"
-        android:theme="@android:style/Theme.Material.Light.DarkActionBar">
+        android:theme="@style/AppTheme">
 
         <activity
             android:name=".MainActivity"
@@ -29,6 +29,7 @@
         <activity
             android:name=".StatsActivity"
             android:exported="false"
+            android:parentActivityName=".MainActivity"
             android:label="달력 · 그래프" />
 
         <!-- 카드 결제 알림 감지. 설정 > 알림 접근에서 허용해야 동작한다. -->
