@@ -3,6 +3,7 @@ package com.lswlight.moneybook
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -55,5 +56,11 @@ class OnDeviceParserTest {
         val p = CardMessageParser.parse("[신한카드] 커피 캐시백 -2,000원 적용 10/28 08:10 스타벅스", now)
         assertTrue(p!!.isBenefit)
         assertEquals(2000L, p.amount)
+    }
+
+    @Test
+    fun bankTransferIgnoredOnDevice() {
+        assertNull(CardMessageParser.parse("MG새마을금고\n[출금] 500,000원 잔액 93,639원 10/28 13:00 타행이체 이우진", now, trustedSource = true))
+        assertNotNull(CardMessageParser.parse("MG새마을금고\n[출금] 55,000원 잔액 93,639원 10/28 13:00 자동이체 SKT통신요금", now, trustedSource = true))
     }
 }

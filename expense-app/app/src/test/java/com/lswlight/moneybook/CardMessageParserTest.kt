@@ -263,6 +263,19 @@ class CardMessageParserTest {
     }
 
     @Test
+    fun bankTransferIsIgnored() {
+        assertNull(parse("MG새마을금고\n[출금] 500,000원 9003-2963-****-1 잔액 93,639원 10/28 13:00 타행이체 이우진", trusted = true))
+        assertNull(parse("MG새마을금고\n[출금] 300,000원 9003-2963-****-1 잔액 93,639원 10/28 13:00 모바일송금", trusted = true))
+        assertNull(parse("MG새마을금고\n[출금] 100,000원 9003-2963-****-1 잔액 93,639원 10/28 13:00 ATM출금", trusted = true))
+    }
+
+    @Test
+    fun autoDebitIsStillExpense() {
+        val p = parse("MG새마을금고\n[출금] 55,000원 9003-2963-****-1 잔액 93,639원 10/28 13:00 자동이체 SKT통신요금", trusted = true)!!
+        assertEquals(55000L, p.amount)
+    }
+
+    @Test
     fun ignoresNonPaymentMessages() {
         assertNull(parse("신한카드(1234) 승인거절 홍*동 12,500원 한도초과"))
         assertNull(parse("[신한카드] 11월 결제예정금액은 1,234,567원입니다"))

@@ -67,6 +67,9 @@ object CardMessageParser {
     private val EXCLUDE = Regex("""승인\s*거절|거절|결제\s*예정|결제\s*대금|청구\s*금액|명세서|연체|이용\s*대금|출금\s*예정|\(광고\)|인증번호|\[입금]|입금되었습니다""")
     // 출금: 은행 앱의 체크카드·계좌 출금 알림 (예: MG새마을금고 "[출금] 18,500원 ... 양천돈까스")
     private val PAYMENT_WORD = Regex("""승인|결제|사용|일시불|할부|취소|출금""")
+    // 자동이체(통신비·관리비 등)는 실제 지출이라 넣지 않는다
+    private val TRANSFER_WORD = Regex("""(?<!자동)이체|송금|ATM|CD\s*출금|현금\s*출금|대체출금""")
+
     // 은행 출금 알림 (문자·카카오톡으로 받은 경우): 은행 이름 + 출금 + 잔액이 모두 있어야 인정 (일반 대화와 구분)
     private val BANK_NAME = Regex("""은행|금고|뱅크|신협|우체국|농협|수협""")
     private fun isBankWithdrawal(body: String) =
@@ -90,6 +93,8 @@ object CardMessageParser {
     ): ParsedPayment? {
         val body = text.replace("\r", "").lines().joinToString("\n") { it.trim() }.trim()
         if (body.isEmpty() || EXCLUDE.containsMatchIn(body)) return null
+        // 은행 출금 중 이체·송금·ATM 출금은 지출이 아니라 돈을 옮긴 것이므로 기록하지 않는다 (카드 승인 문구는 제외)
+        if (body.contains("출금") && TRANSFER_WORD.containsMatchIn(body) && !body.contains("승인")) return null
         // "승인/결제" 단어가 없어도 "캐시백 -2,000원" 처럼 - 붙은 혜택 금액이면 인정한다
         val benefitNotice = BENEFIT_WORD.containsMatchIn(body) && MINUS_AMOUNT.containsMatchIn(body)
         if (!PAYMENT_WORD.containsMatchIn(body) && !benefitNotice) return null

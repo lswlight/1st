@@ -109,6 +109,7 @@ class MainActivity : Activity() {
         root.addView(horizontal().apply {
             addView(button("최근 감지 알림") { showDetectLog() }, weight())
             addView(button("환율·수수료") { showRates() }, weight())
+            addView(button("기록 제외") { showExcludeList() }, weight())
         })
 
         list = vertical()
@@ -202,6 +203,16 @@ class MainActivity : Activity() {
                 refresh()
                 dialogRef?.dismiss()
             }, margins(top = 12))
+        }
+        // 계좌 이체처럼 지출이 아닌 자동 기록: 이 상대를 제외 목록에 넣고 이 내역도 지운다
+        if (existing != null && existing.auto && existing.kind == Kind.EXPENSE) {
+            form.addView(button("이 상대는 앞으로 기록 안 함") {
+                ExcludeList.add(this, existing.memo)
+                db.delete(existing.id)
+                refresh()
+                toast("'${existing.memo}' 을(를) 제외 목록에 넣었어요")
+                dialogRef?.dismiss()
+            })
         }
 
         val title = (if (existing == null) "추가: " else "수정: ") + if (kind == Kind.INCOME) "수입" else "지출"
@@ -307,6 +318,32 @@ class MainActivity : Activity() {
             .setView(ScrollView(this).apply { addView(body) })
             .setPositiveButton("닫기", null)
             .setNeutralButton("지우기") { _, _ -> DetectLog.clear(this) }
+            .show()
+    }
+
+    /** 자동 기록에서 뺄 상대 이름·단어 목록 편집. */
+    private fun showExcludeList() {
+        val input = EditText(this).apply {
+            setText(ExcludeList.terms(this@MainActivity).joinToString("\n"))
+            hint = "예)\n이우진\n토스\n카카오뱅크"
+            minLines = 5
+            gravity = Gravity.TOP
+        }
+        val body = vertical().apply {
+            setPadding(dp(20), dp(8), dp(20), 0)
+            addView(text("한 줄에 하나씩 적으면, 사용처(상대)에 그 단어가 들어간 알림은 기록하지 않아요.\n" +
+                "내 이름·가족 이름·내 다른 계좌 은행처럼 이체 상대를 넣어 주세요.\n" +
+                "이체·송금·ATM 출금과 입금(월급 등)은 원래 기록하지 않아요.", 13f, Color.GRAY))
+            addView(input)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("기록 제외 목록")
+            .setView(ScrollView(this).apply { addView(body) })
+            .setPositiveButton("저장") { _, _ ->
+                ExcludeList.save(this, input.text.toString().lines())
+                toast("저장했어요")
+            }
+            .setNegativeButton("닫기", null)
             .show()
     }
 

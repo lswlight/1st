@@ -62,6 +62,12 @@ class CardNotificationListener : NotificationListenerService() {
             return
         }
 
+        // 기록 제외 목록에 있는 상대 (내 이름·가족·내 다른 계좌 등으로의 이체)
+        ExcludeList.match(this, parsed.merchant)?.let { term ->
+            DetectLog.add(this, pkg, "제외 목록($term)이라 건너뜀", text)
+            return
+        }
+
         // 문자 속 시각이 알림 시각과 크게 다르면 (오래된 문자 재표시 등) 알림 시각을 쓴다
         val time = parsed.time?.takeIf { Duration.between(it, posted).abs().toDays() < 7 } ?: posted
         // 혜택(할인·캐시백)은 수입, 취소는 음수 지출, 나머지는 지출
