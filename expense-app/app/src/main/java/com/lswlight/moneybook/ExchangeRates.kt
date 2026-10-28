@@ -13,6 +13,7 @@ import java.time.LocalDate
 object ExchangeRates {
     private const val PREFS = "exchange_rates"
     private const val TAG = "MoneyBook"
+    private const val DEFAULT_FEE_PERCENT = 2f
 
     // 첫 주소가 안 되면 다음 주소를 쓴다 (둘 다 가입·키 없이 쓰는 공개 서비스)
     private val SOURCES = listOf(
@@ -34,9 +35,9 @@ object ExchangeRates {
 
     fun isStale(context: Context) = updatedOn(context) != LocalDate.now()
 
-    /** 해외 이용 수수료율 (%). 기본 0. */
+    /** 해외 이용 수수료율 (%). 기본 2 (넉넉하게 잡은 값, 화면에서 바꿀 수 있음). */
     fun feePercent(context: Context): Double =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getFloat("fee", 0f).toDouble()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getFloat("fee", DEFAULT_FEE_PERCENT).toDouble()
 
     fun setFeePercent(context: Context, value: Double) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putFloat("fee", value.toFloat()).apply()
