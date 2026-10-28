@@ -8,6 +8,8 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import java.time.Duration
+import java.time.LocalDateTime
+import java.util.concurrent.Executors
 
 /**
  * 폰에 뜨는 알림 중 카드 승인 문자 / 카카오톡 알림톡 / 카드 앱 푸시를 골라 지출로 기록한다.
@@ -16,6 +18,9 @@ import java.time.Duration
 class CardNotificationListener : NotificationListenerService() {
 
     private val main = Handler(Looper.getMainLooper())
+
+    // 저장과 환율 받기는 화면 스레드 밖에서 한 건씩 차례로 처리한다 (중복 확인이 꼬이지 않게)
+    private val worker = Executors.newSingleThreadExecutor()
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val pkg = sbn.packageName
@@ -31,7 +36,16 @@ class CardNotificationListener : NotificationListenerService() {
         // 카드사 앱 알림은 제목이 "결제" 뿐이라, 앱 이름을 첫 줄로 붙여 카드사를 알 수 있게 한다
         val text = notificationText(n).let { if (label.contains("카드")) "$label\n$it" else it }
         val posted = sbn.postTime.toLocalDateTime()
-        val parsed = CardMessageParser.parse(text, posted, trusted)
+        worker.execute { record(pkg, text, posted, trusted) }
+    }
+
+    private fun record(pkg: String, text: String, posted: LocalDateTime, trusted: Boolean) {
+        val fee = ExchangeRates.feePercent(this)
+        var parsed = CardMessageParser.parse(text, posted, trusted, ExchangeRates.cached(this), fee)
+        // 해외 결제인데 오늘 환율을 아직 안 받았으면 받아서 다시 계산한다 (하루 한 번, 실패하면 저장된 값 사용)
+        if (parsed != null && parsed.foreign.isNotEmpty() && ExchangeRates.isStale(this) && ExchangeRates.refresh(this)) {
+            parsed = CardMessageParser.parse(text, posted, trusted, ExchangeRates.cached(this), fee)
+        }
         if (parsed == null) {
             DetectLog.add(this, pkg, "결제 문구 아님", text)
             return
@@ -60,6 +74,11 @@ class CardNotificationListener : NotificationListenerService() {
         Log.i(TAG, "자동 기록: ${parsed.merchant} $amount ($pkg)")
         DetectLog.add(this, pkg, "기록됨: ${parsed.memo()} ${MainActivity.won(amount)}", text)
         main.post { LedgerDb.onChanged?.invoke() }
+    }
+
+    override fun onDestroy() {
+        worker.shutdown()
+        super.onDestroy()
     }
 
     private fun appLabel(pkg: String): String = try {

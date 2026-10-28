@@ -134,7 +134,7 @@ class CardMessageParserTest {
         assertEquals("GOOGLE*YOUTUBEPREMIUM TOKYO", p.merchant)
         assertEquals("하나카드", p.card)
         assertEquals(LocalDateTime.of(2026, 10, 27, 22, 40), p.time)
-        assertEquals("GOOGLE*YOUTUBEPREMIUM TOKYO (JPY 2,280, 환산 추정)", p.memo())
+        assertEquals("GOOGLE*YOUTUBEPREMIUM TOKYO (JPY 2,280 × 9.30원, 추정)", p.memo())
     }
 
     @Test
@@ -150,6 +150,46 @@ class CardMessageParserTest {
         val p = parse("현대카드 해외승인 홍*동\nUSD 10.00 (원화 13,950원)\n10/27 09:30\nNETFLIX")!!
         assertEquals(13950L, p.amount)
         assertEquals("", p.foreign)
+    }
+
+    @Test
+    fun liveRateAndFee() {
+        val p = CardMessageParser.parse(
+            "하나카드\n결제\n(1*2*)이*우님 10/27 22:40/해외/승인/JPY 2,280/GOOGLE*YOUTUBEPREMIUM TOKYO 신용 결제로 처리되었습니다.",
+            now, trustedSource = true, rates = mapOf("JPY" to 9.0), feePercent = 1.4,
+        )!!
+        assertEquals(Math.round(2280 * 9.0 * 1.014), p.amount)
+        assertEquals("GOOGLE*YOUTUBEPREMIUM TOKYO (JPY 2,280 × 9.00원 + 수수료 1.4%, 추정)", p.memo())
+    }
+
+    @Test
+    fun feeNotAppliedToDomestic() {
+        val p = CardMessageParser.parse("신한카드(1234)승인 홍*동 10,000원(일시불)10/27 12:00 편의점", now, feePercent = 1.4)!!
+        assertEquals(10000L, p.amount)
+        assertEquals("편의점", p.memo())
+    }
+
+    @Test
+    fun rateJsonOpenErApi() {
+        val json = """{"result":"success","base_code":"KRW","rates":{"KRW":1,"JPY":0.1075,"USD":0.000714,"AED":0.0026}}"""
+        val r = ExchangeRateJson.krwPerUnit(json)
+        assertEquals(1 / 0.1075, r["JPY"]!!, 1e-9)
+        assertEquals(1 / 0.000714, r["USD"]!!, 1e-6)
+        assertNull(r["KRW"])   // 지원 통화가 아니면 버린다
+        assertNull(r["AED"])
+    }
+
+    @Test
+    fun rateJsonFawazahmed() {
+        val json = """{"date":"2026-10-27","krw":{"1inch":0.003,"jpy":0.1075,"usd":7.14e-4}}"""
+        val r = ExchangeRateJson.krwPerUnit(json)
+        assertEquals(1 / 0.1075, r["JPY"]!!, 1e-9)
+        assertEquals(1 / 7.14e-4, r["USD"]!!, 1e-6)
+    }
+
+    @Test
+    fun rateJsonBroken() {
+        assertTrue(ExchangeRateJson.krwPerUnit("<html>error</html>").isEmpty())
     }
 
     @Test

@@ -29,6 +29,12 @@ jobs:
       - name: 테스트 및 APK 빌드
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
 
+      - name: 환율 서비스 응답 확인 (참고용)
+        continue-on-error: true
+        run: |
+          curl -sS -m 10 https://open.er-api.com/v6/latest/KRW | head -c 400; echo
+          curl -sS -m 10 https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/krw.json | grep -o '"date":"[^"]*"\|"jpy":[0-9.e-]*\|"usd":[0-9.e-]*'
+
       - name: 서명 및 패키지 정보 확인
         run: |
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)

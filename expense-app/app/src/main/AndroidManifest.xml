@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- 해외 결제 환산용 환율을 하루 한 번 받는다 (환율표 요청만 보내고 결제 내역은 보내지 않음) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- 알림을 보낸 앱의 이름(예: 하나카드)을 읽기 위해 설치된 앱 목록을 볼 수 있게 한다 -->
     <queries>
         <intent>

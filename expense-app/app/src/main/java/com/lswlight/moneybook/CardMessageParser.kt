@@ -10,9 +10,15 @@ data class ParsedPayment(
     val card: String,          // 카드사 (못 찾으면 빈 문자열)
     val time: LocalDateTime?,  // 메시지에 적힌 결제 시각 (없으면 null)
     val foreign: String = "",  // 해외 결제의 원래 금액 (예: "JPY 2,280"), 이때 amount 는 원화 환산 추정치
+    val rate: Double = 0.0,    // 환산에 쓴 외화 1단위당 원화
+    val feePercent: Double = 0.0, // 환산 금액에 더한 해외 이용 수수료율
 ) {
-    /** 내역에 남길 내용. 해외 결제면 원래 금액을 함께 적는다. */
-    fun memo() = if (foreign.isEmpty()) merchant else "$merchant ($foreign, 환산 추정)"
+    /** 내역에 남길 내용. 해외 결제면 원래 금액과 환산 근거를 함께 적는다. */
+    fun memo(): String {
+        if (foreign.isEmpty()) return merchant
+        val fee = if (feePercent > 0) " + 수수료 ${"%.2f".format(feePercent).trimEnd('0').trimEnd('.')}%" else ""
+        return "$merchant ($foreign × ${"%.2f".format(rate)}원$fee, 추정)"
+    }
 }
 
 /**
@@ -29,10 +35,14 @@ object CardMessageParser {
     // "삼성1234승인" 처럼 카드 단어 없이 카드사 이름 뒤에 카드번호가 붙는 문자
     private val CARD_SHORT = Regex("""(KB국민|국민|신한|현대|삼성|롯데|하나|우리|NH|농협|BC|씨티)\d""")
     // 해외 결제 금액: "JPY 2,280", "USD 12.50"
-    private val FOREIGN = Regex("""(?<![A-Z])(USD|JPY|EUR|CNY|GBP|HKD|SGD|AUD|CAD|CHF|THB|VND|TWD|PHP|NZD|MYR|IDR)\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)""")
+    val CURRENCIES = listOf(
+        "USD", "JPY", "EUR", "CNY", "GBP", "HKD", "SGD", "AUD", "CAD", "CHF",
+        "THB", "VND", "TWD", "PHP", "NZD", "MYR", "IDR",
+    )
+    private val FOREIGN = Regex("""(?<![A-Z])(${CURRENCIES.joinToString("|")})\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)""")
 
-    // 외화 1단위당 대략적인 원화 (인터넷 권한이 없어 실시간 환율 대신 쓰는 추정치)
-    private val KRW_PER_UNIT = mapOf(
+    // 외화 1단위당 대략적인 원화. 받아 둔 환율이 없을 때(인터넷 안 됨 등)만 쓴다
+    val FALLBACK_KRW_PER_UNIT = mapOf(
         "USD" to 1400.0, "JPY" to 9.3, "EUR" to 1600.0, "CNY" to 195.0, "GBP" to 1850.0,
         "HKD" to 180.0, "SGD" to 1080.0, "AUD" to 920.0, "CAD" to 1010.0, "CHF" to 1750.0,
         "THB" to 42.0, "VND" to 0.055, "TWD" to 45.0, "PHP" to 24.0, "NZD" to 830.0,
@@ -54,8 +64,16 @@ object CardMessageParser {
      * @param text 알림 제목과 본문을 줄바꿈으로 이은 문자열
      * @param now  연도를 정하는 기준 시각
      * @param trustedSource 카드사 앱처럼 결제 알림만 보내는 앱이면 true (카드 단어가 없어도 인정)
+     * @param rates 외화 1단위당 원화 (인터넷에서 받아 둔 환율). 없는 통화는 고정 추정치를 쓴다
+     * @param feePercent 해외 결제 환산 금액에 더할 수수료율 (예: 1.4)
      */
-    fun parse(text: String, now: LocalDateTime = LocalDateTime.now(), trustedSource: Boolean = false): ParsedPayment? {
+    fun parse(
+        text: String,
+        now: LocalDateTime = LocalDateTime.now(),
+        trustedSource: Boolean = false,
+        rates: Map<String, Double> = emptyMap(),
+        feePercent: Double = 0.0,
+    ): ParsedPayment? {
         val body = text.replace("\r", "").lines().joinToString("\n") { it.trim() }.trim()
         if (body.isEmpty() || EXCLUDE.containsMatchIn(body)) return null
         if (!PAYMENT_WORD.containsMatchIn(body)) return null
@@ -64,7 +82,8 @@ object CardMessageParser {
         // 원화 금액이 있으면 그대로, 없으면 외화 금액을 원화로 환산한다
         val krw = findAmount(body)
         val foreign = if (krw == null) FOREIGN.find(body) else null
-        val amount = krw ?: foreign?.let { toKrw(it.groupValues[1], it.groupValues[2]) } ?: return null
+        val rate = foreign?.let { rates[it.groupValues[1]] ?: FALLBACK_KRW_PER_UNIT[it.groupValues[1]] } ?: 0.0
+        val amount = krw ?: foreign?.let { toKrw(it.groupValues[2], rate * (1 + feePercent / 100)) } ?: return null
         val card = (CARD.find(body) ?: CARD_SHORT.find(body))?.let { normalizeCard(it.groupValues[1]) }
             ?: if (body.contains("[KB]")) "KB국민카드" else ""
 
@@ -75,12 +94,14 @@ object CardMessageParser {
             card = card,
             time = findTime(body, now),
             foreign = foreign?.let { "${it.groupValues[1]} ${it.groupValues[2]}" }.orEmpty(),
+            rate = rate,
+            feePercent = if (foreign != null) feePercent else 0.0,
         )
     }
 
-    private fun toKrw(currency: String, value: String): Long? {
+    private fun toKrw(value: String, krwPerUnit: Double): Long? {
         val v = value.replace(",", "").toDoubleOrNull() ?: return null
-        val krw = Math.round(v * (KRW_PER_UNIT[currency] ?: return null))
+        val krw = Math.round(v * krwPerUnit)
         return if (krw > 0) krw else null
     }
 

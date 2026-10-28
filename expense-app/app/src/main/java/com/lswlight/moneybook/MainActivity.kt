@@ -96,7 +96,10 @@ class MainActivity : Activity() {
             addView(button("문자 붙여넣기") { pasteMessage() }, weight())
         }, margins(top = 8))
 
-        root.addView(button("최근 감지 알림 보기") { showDetectLog() }, margins(top = 0))
+        root.addView(horizontal().apply {
+            addView(button("최근 감지 알림") { showDetectLog() }, weight())
+            addView(button("환율·수수료") { showRates() }, weight())
+        })
 
         list = vertical()
         root.addView(list, margins(top = 8))
@@ -231,7 +234,10 @@ class MainActivity : Activity() {
             .setView(vertical().apply { setPadding(dp(20), dp(8), dp(20), 0); addView(input) })
             .setPositiveButton("읽기") { _, _ ->
                 val raw = input.text.toString()
-                val p = CardMessageParser.parse(raw, LocalDateTime.now(), trustedSource = true)
+                val p = CardMessageParser.parse(
+                    raw, LocalDateTime.now(), trustedSource = true,
+                    rates = ExchangeRates.cached(this), feePercent = ExchangeRates.feePercent(this),
+                )
                 if (p == null) {
                     toast("카드 결제 문구를 찾지 못했어요")
                 } else {
@@ -273,6 +279,60 @@ class MainActivity : Activity() {
             .setPositiveButton("닫기", null)
             .setNeutralButton("지우기") { _, _ -> DetectLog.clear(this) }
             .show()
+    }
+
+    /** 받아 둔 환율 확인, 지금 받기, 해외 이용 수수료율 설정. */
+    private fun showRates() {
+        val body = vertical().apply { setPadding(dp(20), dp(8), dp(20), 0) }
+        val info = text("", 14f)
+        fun fillInfo() {
+            val rates = ExchangeRates.cached(this)
+            val date = ExchangeRates.updatedOn(this)
+            info.text = buildString {
+                append(if (date == null) "아직 받은 환율이 없어 고정 추정치를 씁니다.\n" else "${date} 기준 환율\n")
+                for (code in listOf("JPY", "USD", "EUR", "CNY")) {
+                    val v = rates[code] ?: CardMessageParser.FALLBACK_KRW_PER_UNIT[code] ?: continue
+                    append("1 $code = ${"%,.2f".format(v)}원${if (code in rates) "" else " (고정)"}\n")
+                }
+                append("해외 결제가 있는 날 하루 한 번 자동으로 받습니다.")
+            }
+        }
+        fillInfo()
+        body.addView(info)
+        val fee = field(body, "해외 이용 수수료율 (%) — 환산 금액에 더함, 예: 1.4",
+            ExchangeRates.feePercent(this).let { if (it == 0.0) "0" else it.toString() },
+            InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("환율·수수료")
+            .setView(ScrollView(this).apply { addView(body) })
+            .setPositiveButton("저장", null)
+            .setNeutralButton("지금 환율 받기", null)
+            .setNegativeButton("닫기", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val v = fee.text.toString().trim().toDoubleOrNull()
+                if (v == null || v < 0 || v > 10) {
+                    toast("수수료율은 0~10 사이 숫자로 입력해 주세요")
+                } else {
+                    ExchangeRates.setFeePercent(this, v)
+                    toast("저장했어요. 다음 해외 결제부터 적용됩니다")
+                    dialog.dismiss()
+                }
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                info.text = "환율을 받는 중..."
+                Thread {
+                    val ok = ExchangeRates.refresh(this)
+                    runOnUiThread {
+                        fillInfo()
+                        toast(if (ok) "최신 환율을 받았어요" else "환율을 받지 못했어요. 인터넷 연결을 확인해 주세요")
+                    }
+                }.start()
+            }
+        }
+        dialog.show()
     }
 
     // ---------------------------------------------------------------- 도우미
