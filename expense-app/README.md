@@ -52,7 +52,7 @@
 ## 가족 공유용 설치 가이드
 
 - 다운로드 링크 (항상 최신 버전): https://github.com/lswlight/1st/releases/download/moneybook-latest/moneybook.apk
-- 그림 가이드 3장 (QR 포함): [1. 다운로드·설치](docs/install-guide-1.png) · [2. 설치가 막힐 때](docs/install-guide-2.png) · [3. 처음 설정](docs/install-guide-3.png)
+- 그림 가이드 4장 (QR 포함, 2장은 실제 휴대폰 화면): [1. 다운로드·설치](docs/install-guide-1.png) · [2-1. 설치가 막힐 때: Play 프로텍트](docs/install-guide-2-1.png) · [2-2. 설치가 막힐 때: 갤럭시 보안](docs/install-guide-2-2.png) · [3. 처음 설정](docs/install-guide-3.png)
 
 ## 설치 (폰)
 
