@@ -99,6 +99,11 @@ class MainActivity : Activity() {
         }
         root.addView(permissionBanner, margins(top = 8))
 
+        // 달력·그래프 화면
+        root.addView(button("📅 달력 · 📊 그래프로 보기") {
+            startActivity(Intent(this, StatsActivity::class.java).putExtra(StatsActivity.EXTRA_MONTH, month.toString()))
+        }, margins(top = 8))
+
         // 입력 버튼
         root.addView(horizontal().apply {
             addView(button("+ 수입") { editEntry(null, Kind.INCOME) }, weight())

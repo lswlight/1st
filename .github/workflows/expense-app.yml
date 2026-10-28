@@ -100,3 +100,23 @@ jobs:
             sleep 5
             adb shell pidof com.lswlight.moneybook
             ./gradlew connectedDebugAndroidTest --stacktrace
+            adb pull /data/local/tmp/stats-calendar.png stats-calendar.png || true
+            adb pull /data/local/tmp/stats-graph.png stats-graph.png || true
+
+      - name: 달력·그래프 화면 캡처 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stats-screenshots
+          path: expense-app/stats-*.png
+          if-no-files-found: ignore
+
+      - name: 달력·그래프 화면 캡처 출력 (참고용, base64 JPEG)
+        if: always()
+        continue-on-error: true
+        run: |
+          for f in stats-calendar stats-graph; do
+            [ -f $f.png ] || continue
+            convert $f.png -resize 40% -quality 60 $f.jpg
+            echo "SHOT-$f $(base64 -w 0 $f.jpg)"
+          done

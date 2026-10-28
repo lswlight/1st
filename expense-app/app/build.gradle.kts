@@ -11,8 +11,8 @@ android {
         applicationId = "com.lswlight.moneybook"
         minSdk = 26
         targetSdk = 35
-        versionCode = 14
-        versionName = "1.13"
+        versionCode = 15
+        versionName = "1.14"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -43,4 +43,5 @@ dependencies {
     // 실제 안드로이드(에뮬레이터)에서 정규식 등을 검증하는 테스트용. 앱 APK 에는 들어가지 않는다
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:core:1.6.1")
 }
