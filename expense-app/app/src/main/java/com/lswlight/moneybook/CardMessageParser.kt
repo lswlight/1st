@@ -12,9 +12,11 @@ data class ParsedPayment(
     val foreign: String = "",  // 해외 결제의 원래 금액 (예: "JPY 2,280"), 이때 amount 는 원화 환산 추정치
     val rate: Double = 0.0,    // 환산에 쓴 외화 1단위당 원화
     val feePercent: Double = 0.0, // 환산 금액에 더한 해외 이용 수수료율
+    val isBenefit: Boolean = false, // 할인·캐시백처럼 금액 앞에 - 가 붙어 온 혜택이면 true (수입으로 기록)
 ) {
     /** 내역에 남길 내용. 해외 결제면 원래 금액과 환산 근거를 함께 적는다. */
     fun memo(): String {
+        if (isBenefit) return "카드 혜택: $merchant"
         if (foreign.isEmpty()) return merchant
         val fee = if (feePercent > 0) " + 수수료 ${"%.2f".format(feePercent).trimEnd('0').trimEnd('.')}%" else ""
         return "$merchant ($foreign × ${"%,.2f".format(rate)}원$fee, 추정)"
@@ -53,6 +55,12 @@ object CardMessageParser {
     private val TOSS_STYLE = Regex("""^(.+?)에서\s*[\d,]+\s*원""", RegexOption.MULTILINE)
 
     // 이 단어 바로 뒤의 금액은 결제 금액이 아니다 (누적 사용액, 잔액, 한도 등)
+    // 혜택 금액 앞에 붙는 단어. "할인 -1,500원" 처럼 - 가 함께 있으면 건너뛰지 않고 혜택으로 읽는다
+    private val BENEFIT_PREFIX = Regex("""(할인|캐시백|적립|청구할인|혜택)[^\n\d]{0,6}$""")
+    private val BENEFIT_WORD = Regex("""할인|캐시백|적립|혜택""")
+    private val MINUS_AMOUNT = Regex("""[-−－]\s*\d[\d,]*\s*원""")
+    private val MINUS_BEFORE = Regex("""[-−－]\s*$""")
+
     private val NOT_PAYMENT_PREFIX = Regex("""(누적|잔액|한도|포인트|적립|캐시백|할인|청구)[^\n\d]{0,6}$""")
 
     // 결제가 아닌 안내 문자 (거절, 청구서, 광고 등)
@@ -76,11 +84,13 @@ object CardMessageParser {
     ): ParsedPayment? {
         val body = text.replace("\r", "").lines().joinToString("\n") { it.trim() }.trim()
         if (body.isEmpty() || EXCLUDE.containsMatchIn(body)) return null
-        if (!PAYMENT_WORD.containsMatchIn(body)) return null
+        // "승인/결제" 단어가 없어도 "캐시백 -2,000원" 처럼 - 붙은 혜택 금액이면 인정한다
+        val benefitNotice = BENEFIT_WORD.containsMatchIn(body) && MINUS_AMOUNT.containsMatchIn(body)
+        if (!PAYMENT_WORD.containsMatchIn(body) && !benefitNotice) return null
         if (!trustedSource && !CARD_CONTEXT.containsMatchIn(body) && !CARD_SHORT.containsMatchIn(body)) return null
 
         // 원화 금액이 있으면 그대로, 없으면 외화 금액을 원화로 환산한다
-        val krw = findAmount(body)
+        val (krw, minus) = findAmount(body) ?: (null to false)
         val foreign = if (krw == null) FOREIGN.find(body) else null
         val rate = foreign?.let { rates[it.groupValues[1]] ?: FALLBACK_KRW_PER_UNIT[it.groupValues[1]] } ?: 0.0
         val amount = krw ?: foreign?.let { toKrw(it.groupValues[2], rate * (1 + feePercent / 100)) } ?: return null
@@ -90,6 +100,8 @@ object CardMessageParser {
         return ParsedPayment(
             amount = amount,
             isCancel = body.contains("취소"),
+            // 취소 문자의 - 는 환불이므로 혜택이 아니다
+            isBenefit = minus && !body.contains("취소"),
             merchant = findMerchant(body).ifEmpty { "카드 결제" },
             card = card,
             time = findTime(body, now),
@@ -105,12 +117,15 @@ object CardMessageParser {
         return if (krw > 0) krw else null
     }
 
-    private fun findAmount(body: String): Long? {
+    /** 결제 금액과, 금액 앞에 - 가 붙어 있었는지(할인·캐시백 혜택). */
+    private fun findAmount(body: String): Pair<Long, Boolean>? {
         for (m in AMOUNT.findAll(body)) {
             val before = body.substring(0, m.range.first).substringAfterLast('\n')
-            if (NOT_PAYMENT_PREFIX.containsMatchIn(before)) continue
+            val minus = MINUS_BEFORE.containsMatchIn(before)
+            val benefitWord = BENEFIT_PREFIX.containsMatchIn(before)
+            if (NOT_PAYMENT_PREFIX.containsMatchIn(before) && !(minus && benefitWord)) continue
             val value = m.groupValues[1].replace(",", "").toLongOrNull() ?: continue
-            if (value > 0) return value
+            if (value > 0) return value to minus
         }
         return null
     }

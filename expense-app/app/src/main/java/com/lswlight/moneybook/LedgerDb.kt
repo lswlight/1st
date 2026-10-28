@@ -74,12 +74,12 @@ class LedgerDb(context: Context) : SQLiteOpenHelper(context, "moneybook.db", nul
      * 같은 결제가 문자와 카드 앱 알림으로 두 번 오는 경우를 거른다.
      * 같은 금액의 자동 기록이 앞뒤 3분 안에 있으면 중복으로 본다.
      */
-    fun hasRecentAuto(amount: Long, time: LocalDateTime): Boolean {
+    fun hasRecentAuto(kind: Kind, amount: Long, time: LocalDateTime): Boolean {
         val t = time.toMillis()
         val window = 3 * 60 * 1000L
         return query(
-            "auto = 1 AND amount = ? AND time BETWEEN ? AND ?",
-            arrayOf(amount.toString(), (t - window).toString(), (t + window).toString()),
+            "auto = 1 AND kind = ? AND amount = ? AND time BETWEEN ? AND ?",
+            arrayOf(kind.name, amount.toString(), (t - window).toString(), (t + window).toString()),
         ).isNotEmpty()
     }
 

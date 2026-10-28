@@ -205,6 +205,36 @@ class CardMessageParserTest {
     }
 
     @Test
+    fun coffeeDiscountWithMinusIsBenefit() {
+        val p = parse("하나카드\n결제\n(1*2*)이*우님 10/28 08:10/국내/승인/-1,500원/스타벅스 커피전문점 할인", trusted = true)!!
+        assertTrue(p.isBenefit)
+        assertEquals(1500L, p.amount)
+        assertTrue(p.memo().startsWith("카드 혜택: "))
+    }
+
+    @Test
+    fun cashbackWordBeforeMinusAmount() {
+        val p = parse("[신한카드] 커피 캐시백 -2,000원 적용 10/28 08:10 스타벅스")!!
+        assertTrue(p.isBenefit)
+        assertEquals(2000L, p.amount)
+    }
+
+    @Test
+    fun minusOnCancelIsStillCancel() {
+        val p = parse("하나카드(1*2*)승인취소 홍*동님 -12,500원 10/27 14:00 스타벅스")!!
+        assertTrue(p.isCancel)
+        assertEquals(false, p.isBenefit)
+    }
+
+    @Test
+    fun discountWordWithoutMinusIsNotPayment() {
+        // "5,000원 할인" 처럼 - 없이 혜택 안내만 있는 금액은 결제 금액으로 보지 않는다 (실제 결제 금액을 고른다)
+        val p = parse("신한카드(1234)승인 홍*동 할인 5,000원 적용 결제 45,000원 10/27 12:00 이마트")!!
+        assertEquals(45000L, p.amount)
+        assertEquals(false, p.isBenefit)
+    }
+
+    @Test
     fun ignoresNonPaymentMessages() {
         assertNull(parse("신한카드(1234) 승인거절 홍*동 12,500원 한도초과"))
         assertNull(parse("[신한카드] 11월 결제예정금액은 1,234,567원입니다"))

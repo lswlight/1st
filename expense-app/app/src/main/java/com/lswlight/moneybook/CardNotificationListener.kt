@@ -63,16 +63,18 @@ class CardNotificationListener : NotificationListenerService() {
 
         // 문자 속 시각이 알림 시각과 크게 다르면 (오래된 문자 재표시 등) 알림 시각을 쓴다
         val time = parsed.time?.takeIf { Duration.between(it, posted).abs().toDays() < 7 } ?: posted
+        // 혜택(할인·캐시백)은 수입, 취소는 음수 지출, 나머지는 지출
+        val kind = if (parsed.isBenefit) Kind.INCOME else Kind.EXPENSE
         val amount = if (parsed.isCancel) -parsed.amount else parsed.amount
 
         val db = LedgerDb.get(this)
-        if (db.hasRecentAuto(amount, time)) {
+        if (db.hasRecentAuto(kind, amount, time)) {
             DetectLog.add(this, pkg, "중복이라 건너뜀 (3분 안에 같은 금액이 이미 기록됨)", text)
             return
         }
         db.save(
             Entry(
-                kind = Kind.EXPENSE,
+                kind = kind,
                 amount = amount,
                 memo = parsed.memo(),
                 card = parsed.card,

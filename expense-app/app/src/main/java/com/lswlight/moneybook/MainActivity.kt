@@ -193,6 +193,16 @@ class MainActivity : Activity() {
         if (src != null && src.raw.isNotEmpty()) {
             form.addView(text("원본 알림\n${src.raw}", 12f, Color.GRAY).apply { setPadding(0, dp(12), 0, 0) })
         }
+        // 잘못 분류된 내역(예: 할인 혜택이 지출로 기록됨)을 바로잡는 버튼
+        var dialogRef: AlertDialog? = null
+        if (existing != null) {
+            val other = if (kind == Kind.INCOME) Kind.EXPENSE else Kind.INCOME
+            form.addView(button(if (other == Kind.INCOME) "수입으로 바꾸기" else "지출로 바꾸기") {
+                db.save(existing.copy(kind = other, amount = Math.abs(existing.amount)))
+                refresh()
+                dialogRef?.dismiss()
+            }, margins(top = 12))
+        }
 
         val title = (if (existing == null) "추가: " else "수정: ") + if (kind == Kind.INCOME) "수입" else "지출"
         val builder = AlertDialog.Builder(this)
@@ -204,6 +214,7 @@ class MainActivity : Activity() {
             builder.setNeutralButton("삭제") { _, _ -> db.delete(existing.id); refresh() }
         }
         val dialog = builder.create()
+        dialogRef = dialog
         dialog.setOnShowListener {
             // 입력이 잘못되면 창을 닫지 않고 알려 준다
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
@@ -258,10 +269,11 @@ class MainActivity : Activity() {
                 if (p == null) {
                     toast("카드 결제 문구를 찾지 못했어요")
                 } else {
+                    val kind = if (p.isBenefit) Kind.INCOME else Kind.EXPENSE
                     editEntry(
-                        null, Kind.EXPENSE,
+                        null, kind,
                         Entry(
-                            kind = Kind.EXPENSE,
+                            kind = kind,
                             amount = if (p.isCancel) -p.amount else p.amount,
                             memo = p.memo(),
                             card = p.card,

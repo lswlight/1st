@@ -49,4 +49,11 @@ class OnDeviceParserTest {
         assertEquals(12500L, p!!.amount)
         assertEquals("스타벅스", p.merchant)
     }
+
+    @Test
+    fun benefitMinusOnDevice() {
+        val p = CardMessageParser.parse("[신한카드] 커피 캐시백 -2,000원 적용 10/28 08:10 스타벅스", now)
+        assertTrue(p!!.isBenefit)
+        assertEquals(2000L, p.amount)
+    }
 }
