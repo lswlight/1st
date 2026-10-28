@@ -111,12 +111,10 @@ jobs:
           path: expense-app/stats-*.png
           if-no-files-found: ignore
 
-      - name: 달력·그래프 화면 캡처 출력 (참고용, base64 JPEG)
-        if: always()
+      - name: 달력·그래프 화면 미리보기를 릴리스에 올리기
+        if: github.event_name == 'push'
         continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          for f in stats-calendar stats-graph; do
-            [ -f $f.png ] || continue
-            convert $f.png -resize 40% -quality 60 $f.jpg
-            echo "SHOT-$f $(base64 -w 0 $f.jpg)"
-          done
+          ls stats-*.png && gh release upload moneybook-latest stats-calendar.png stats-graph.png --clobber --repo "$GITHUB_REPOSITORY"
