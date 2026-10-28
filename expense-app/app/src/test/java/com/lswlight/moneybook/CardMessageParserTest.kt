@@ -235,13 +235,18 @@ class CardMessageParserTest {
     }
 
     @Test
-    fun mgBankAppWithdrawal() {
-        // MG새마을금고 앱 알림 (체크카드 결제가 계좌 출금으로 옴)
-        val p = parse("MG새마을금고\n[출금] 18,500원 9003-2963-****-1 잔액 393,639원 10/28 11:44 양천돈까스", trusted = true)!!
+    fun mgCheckCardApproval() {
+        // MG새마을금고 앱: 체크카드 결제 시 "[출금]" 과 함께 오는 승인 알림 — 이것으로 기록한다
+        val p = parse("MG새마을금고\nMG체크카드(9*1*) 18,500원 승인 10/28 11:44 양천돈까스", trusted = true)!!
         assertEquals(18500L, p.amount)
         assertEquals("양천돈까스", p.merchant)
         assertEquals(LocalDateTime.of(2026, 10, 28, 11, 44), p.time)
-        assertEquals(false, p.isBenefit)
+    }
+
+    @Test
+    fun plainBankWithdrawalIsIgnored() {
+        // 같은 결제의 계좌 출금 알림은 기록하지 않는다 (승인 알림과 이중 기록 방지, 계좌 이체와 같은 모양이라)
+        assertNull(parse("MG새마을금고\n[출금] 18,500원 9003-2963-****-1 잔액 393,639원 10/28 11:44 양천돈까스", trusted = true))
     }
 
     @Test
@@ -251,10 +256,7 @@ class CardMessageParserTest {
 
     @Test
     fun bankWithdrawalForwardedByKakao() {
-        // 카카오톡으로 받은 은행 출금 문구 (제목은 보낸 사람 이름) — 카드 단어가 없어도 은행+출금+잔액이면 인정
-        val p = parse("graft\nMG새마을금고 [출금] 18,500원 9003-2963-****-1 잔액 393,639원 10/28 11:44 양천돈까스")!!
-        assertEquals(18500L, p.amount)
-        assertEquals("양천돈까스", p.merchant)
+        assertNull(parse("graft\nMG새마을금고 [출금] 18,500원 9003-2963-****-1 잔액 393,639원 10/28 11:44 양천돈까스"))
     }
 
     @Test
@@ -276,10 +278,8 @@ class CardMessageParserTest {
     }
 
     @Test
-    fun wooriWithdrawalMerchantWithoutAccountNumber() {
-        val p = parse("우리WON뱅킹 입출금알림\n[출금] 금고이상우 10,000원 1002-938-235***계좌 잔액 71,863원 10/28 12:46", trusted = true)!!
-        assertEquals(10000L, p.amount)
-        assertEquals("금고이상우", p.merchant)
+    fun wooriTransferIsIgnored() {
+        assertNull(parse("우리WON뱅킹 입출금알림\n[출금] 금고이상우 10,000원 1002-938-235***계좌 잔액 71,863원 10/28 12:46", trusted = true))
     }
 
     @Test
