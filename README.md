@@ -12,6 +12,7 @@ skills/youtube-analyzer/
     └── production-handoff.md        # 내 영상 제작 핸드오프 양식
 dist/youtube-analyzer.zip            # claude.ai 업로드용 패키지 (키 없음)
 connector/worker.js                  # 채팅·모바일용 MCP 커넥터 (Cloudflare Workers)
+kr-trader/                           # 국내 주식·코인 트레이딩 분석 스킬 (별도 기능, kr-trader/README.md)
 ```
 
 ## 동작 방식 (무료 경로가 기본)

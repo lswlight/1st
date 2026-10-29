@@ -1,0 +1,146 @@
+# SYMBOL|한글 이름|Yahoo 이름  (scan.py universe --check 로 생성)
+005930.KS|삼성전자|Samsung Electronics Co., Ltd.
+000660.KS|SK하이닉스|SK hynix Inc.
+373220.KS|LG에너지솔루션|LG Energy Solution, Ltd.
+207940.KS|삼성바이오로직스|Samsung Biologics Co.,Ltd.
+005380.KS|현대차|Hyundai Motor Company
+000270.KS|기아|Kia Corporation
+068270.KS|셀트리온|Celltrion, Inc.
+005490.KS|POSCO홀딩스|POSCO Holdings Inc.
+035420.KS|NAVER|NAVER Corporation
+035720.KS|카카오|Kakao Corp.
+051910.KS|LG화학|LG Chem, Ltd.
+006400.KS|삼성SDI|Samsung SDI Co., Ltd.
+012330.KS|현대모비스|Hyundai Mobis Co.,Ltd
+028260.KS|삼성물산|Samsung C&T Corporation
+105560.KS|KB금융|KB Financial Group Inc.
+055550.KS|신한지주|Shinhan Financial Group Co., Ltd.
+086790.KS|하나금융지주|Hana Financial Group Inc.
+316140.KS|우리금융지주|Woori Financial Group Inc.
+032830.KS|삼성생명|Samsung Life Insurance Co., Ltd.
+000810.KS|삼성화재|Samsung Fire & Marine Insurance Co., Ltd.
+066570.KS|LG전자|LG Electronics Inc.
+003550.KS|LG|LG Corp.
+034730.KS|SK|SK Inc.
+017670.KS|SK텔레콤|SK Telecom Co., Ltd.
+030200.KS|KT|KT Corporation
+032640.KS|LG유플러스|LG Uplus Corp.
+015760.KS|한국전력|Korea Electric Power Corporation
+096770.KS|SK이노베이션|SK Innovation Co., Ltd.
+010950.KS|S-Oil|S-Oil Corporation
+011200.KS|HMM|HMM Co.,Ltd
+009150.KS|삼성전기|Samsung Electro-Mechanics Co., Ltd.
+018260.KS|삼성에스디에스|Samsung SDS Co., Ltd.
+034020.KS|두산에너빌리티|Doosan Enerbility Co., Ltd.
+012450.KS|한화에어로스페이스|Hanwha Aerospace Co., Ltd.
+042660.KS|한화오션|Hanwha Ocean Co., Ltd.
+009540.KS|HD한국조선해양|HD Korea Shipbuilding & Offshore Engineering Co., Ltd.
+329180.KS|HD현대중공업|HD Hyundai Heavy Industries Co., Ltd.
+010140.KS|삼성중공업|Samsung Heavy Industries Co., Ltd.
+267250.KS|HD현대|HD Hyundai Co., Ltd.
+267260.KS|HD현대일렉트릭|HD Hyundai Electric Co., Ltd.
+010130.KS|고려아연|Korea Zinc Company, Ltd.
+011170.KS|롯데케미칼|Lotte Chemical Corporation
+090430.KS|아모레퍼시픽|Amorepacific Corporation
+051900.KS|LG생활건강|LG H&H Co., Ltd.
+097950.KS|CJ제일제당|CJ Cheiljedang Corporation
+033780.KS|KT&G|KT&G Corporation
+004020.KS|현대제철|Hyundai Steel Company
+000720.KS|현대건설|Hyundai Engineering & Construction Co.,Ltd.
+047050.KS|포스코인터내셔널|Posco International Corporation
+003670.KS|포스코퓨처엠|Posco Future M Co., Ltd.
+259960.KS|크래프톤|KRAFTON, Inc.
+036570.KS|엔씨소프트|NC Corporation
+251270.KS|넷마블|Netmarble Corporation
+352820.KS|하이브|HYBE Co., Ltd.
+323410.KS|카카오뱅크|KakaoBank Corp.
+377300.KS|카카오페이|Kakao Pay Corp.
+024110.KS|기업은행|Industrial Bank of Korea
+138040.KS|메리츠금융지주|Meritz Financial Group Inc.
+006800.KS|미래에셋증권|Mirae Asset Securities Co., Ltd.
+071050.KS|한국금융지주|Korea Investment Holdings Co., Ltd.
+016360.KS|삼성증권|Samsung Securities Co.,Ltd.
+039490.KS|키움증권|Kiwoom Securities Co., Ltd.
+005830.KS|DB손해보험|DB Insurance Co., Ltd.
+088350.KS|한화생명|Hanwha Life Insurance Co., Ltd.
+029780.KS|삼성카드|Samsung Card Co., Ltd.
+000880.KS|한화|Hanwha Corporation
+009830.KS|한화솔루션|Hanwha Solutions Corporation
+064350.KS|현대로템|Hyundai Rotem Company
+079550.KS|LIG넥스원|LIG Defense&Aerospace Co., Ltd.
+047810.KS|한국항공우주|Korea Aerospace Industries, Ltd.
+272210.KS|한화시스템|Hanwha Systems Co., Ltd.
+042700.KS|한미반도체|HANMI Semiconductor Co., Ltd.
+000100.KS|유한양행|Yuhan Corporation
+128940.KS|한미약품|Hanmi Pharm. Co., Ltd.
+302440.KS|SK바이오사이언스|SK bioscience Co.,Ltd.
+326030.KS|SK바이오팜|SK Biopharmaceuticals Co., Ltd.
+011790.KS|SKC|SKC Co., Ltd.
+006260.KS|LS|LS Corp.
+010120.KS|LS ELECTRIC|LS ELECTRIC Co., Ltd.
+298040.KS|효성중공업|Hyosung Heavy Industries Corporation
+001440.KS|대한전선|Taihan Cable & Solution Co., Ltd.
+034220.KS|LG디스플레이|LG Display Co., Ltd.
+011070.KS|LG이노텍|LG Innotek Co., Ltd.
+204320.KS|HL만도|HL Mando Corporation
+086280.KS|현대글로비스|Hyundai Glovis Co., Ltd.
+018880.KS|한온시스템|Hanon Systems
+004990.KS|롯데지주|LOTTE Corporation
+023530.KS|롯데쇼핑|Lotte Shopping Co., Ltd.
+139480.KS|이마트|E-MART Inc.
+282330.KS|BGF리테일|BGF Retail Co., Ltd.
+007070.KS|GS리테일|GS Retail Co., Ltd.
+078930.KS|GS|GS Holdings Corp.
+036460.KS|한국가스공사|Korea Gas Corporation
+002380.KS|KCC|KCC Corporation
+011780.KS|금호석유|Kumho Petro Chemical Co.,Ltd
+000150.KS|두산|Doosan Corporation
+241560.KS|두산밥캣|Doosan Bobcat Inc.
+180640.KS|한진칼|Hanjin Kal
+003490.KS|대한항공|Korean Airlines Co.,Ltd.
+028050.KS|삼성E&A|Samsung E&A Co., Ltd.
+006360.KS|GS건설|GS Engineering & Construction Corporation
+047040.KS|대우건설|Daewoo Engineering & Construction Co., Ltd.
+375500.KS|DL이앤씨|DL E&C Co.,Ltd.
+001040.KS|CJ|CJ Corporation
+000120.KS|CJ대한통운|CJ Logistics Corporation
+271560.KS|오리온|ORION Corp.
+004370.KS|농심|Nongshim Co., Ltd.
+021240.KS|코웨이|COWAY Co., Ltd.
+008770.KS|호텔신라|Hotel Shilla Co.,Ltd
+035250.KS|강원랜드|Kangwon Land, Inc.
+402340.KS|SK스퀘어|SK Square Co., Ltd.
+450080.KS|에코프로머티|Ecopro Materials Co., Ltd.
+017800.KS|현대엘리베이터|Hyundai Elevator Co., Ltd
+120110.KS|코오롱인더|Kolon Industries, Inc.
+298050.KS|HS효성첨단소재|HS Hyosung Advanced Materials Corporation
+161390.KS|한국타이어앤테크놀로지|Hankook Tire & Technology Co., Ltd.
+002350.KS|넥센타이어|Nexen Tire Corporation
+073240.KS|금호타이어|Kumho Tire Co., Inc.
+247540.KQ|에코프로비엠|EcoPro BM Co., Ltd.
+086520.KQ|에코프로|Ecopro Co., Ltd.
+196170.KQ|알테오젠|ALTEOGEN Inc.
+028300.KQ|HLB|HLB Co., Ltd.
+066970.KS|엘앤에프|L&F Co., Ltd.
+263750.KQ|펄어비스|Pearl Abyss Corp.
+293490.KQ|카카오게임즈|Kakao Games Corp.
+041510.KQ|에스엠|SM Entertainment Co., Ltd.
+035900.KQ|JYP Ent.|JYP Entertainment Corporation
+122870.KQ|와이지엔터테인먼트|YG Entertainment Inc.
+145020.KQ|휴젤|Hugel, Inc.
+214150.KQ|클래시스|CLASSYS Inc.
+039030.KQ|이오테크닉스|EO Technics Co., Ltd.
+058470.KQ|리노공업|LEENO Industrial Inc.
+240810.KQ|원익IPS|Wonik IPS Co., Ltd.
+036930.KQ|주성엔지니어링|JUSUNG ENGINEERING Co.,Ltd.
+357780.KQ|솔브레인|Soulbrain Co., Ltd.
+005290.KQ|동진쎄미켐|Dongjin Semichem Co., Ltd.
+095340.KQ|ISC|ISC Co., Ltd.
+403870.KQ|HPSP|HPSP Co., Ltd.
+277810.KQ|레인보우로보틱스|Rainbow Robotics Co.,Ltd.
+112040.KQ|위메이드|Wemade Co.,Ltd.
+253450.KQ|스튜디오드래곤|Studio Dragon Corporation
+078340.KQ|컴투스|Com2uS Corporation
+141080.KQ|리가켐바이오|LigaChem Biosciences Inc.
+214450.KQ|파마리서치|PharmaResearch Co., Ltd.
+328130.KQ|루닛|Lunit Inc.
