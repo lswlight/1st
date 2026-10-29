@@ -176,9 +176,19 @@ object CardMessageParser {
             if (rest.isNotEmpty()) return rest
         }
 
+        // "고객명 이*우님", "승인시각 10/30 06:16" 같은 항목 줄은 가맹점이 아니다
+        val lines = body.lines().filterNot { INFO_LINE.containsMatchIn(it) }
+        // 금액 줄 바로 다음에 가맹점이 오는 문자가 많다 (KB국민카드 "50,000 원(일시불)" 다음 줄 "미소가득주유소")
+        val amountLine = lines.indexOfFirst { AMOUNT.containsMatchIn(it) && !NOT_PAYMENT_LINE.containsMatchIn(it) }
+        if (amountLine >= 0) {
+            lines.drop(amountLine + 1).map { clean(it) }.firstOrNull { it.isNotEmpty() }?.let { return it }
+        }
         // 나머지는 줄마다 군더더기를 지우고 마지막으로 남는 글자를 가맹점으로 본다
-        return body.lines().map { clean(it) }.lastOrNull { it.isNotEmpty() } ?: ""
+        return lines.map { clean(it) }.lastOrNull { it.isNotEmpty() } ?: ""
     }
+
+    private val INFO_LINE = Regex("""^(고객명|승인시각|승인일시|거래일시|이용일시|일시|시각|카드명|이용카드|결제방법|할부개월)\s""")
+    private val NOT_PAYMENT_LINE = Regex("""^(누적|잔액|총누적|한도)""")
 
     private val CLEAN_PATTERNS = listOf(
         Regex("""\[[^\]]*]"""),                    // [Web발신], [신한카드]

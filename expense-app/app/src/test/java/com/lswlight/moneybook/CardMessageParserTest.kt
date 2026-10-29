@@ -290,6 +290,28 @@ class CardMessageParserTest {
     }
 
     @Test
+    fun kbRcsCardMessage() {
+        // KB국민카드 새 형식(RCS 카드형 문자): 금액 다음 줄이 가맹점, 아래는 "항목 값" 줄
+        val p = parse(
+            """
+            [Web발신]
+            KB국민카드8063
+            승인
+            50,000 원(일시불)
+            미소가득주유소
+            고객명 이*우님
+            승인시각 10/30 06:16
+            누적 537,080원
+            한 달 동안 얼마나 썼을까
+            """
+        )!!
+        assertEquals(50000L, p.amount)
+        assertEquals("미소가득주유소", p.merchant)
+        assertEquals("KB국민카드", p.card)
+        assertEquals(LocalDateTime.of(2026, 10, 30, 6, 16).minusYears(if (LocalDateTime.of(2026, 10, 30, 6, 16).isAfter(now.plusDays(1))) 1 else 0), p.time)
+    }
+
+    @Test
     fun ignoresNonPaymentMessages() {
         assertNull(parse("신한카드(1234) 승인거절 홍*동 12,500원 한도초과"))
         assertNull(parse("[신한카드] 11월 결제예정금액은 1,234,567원입니다"))
