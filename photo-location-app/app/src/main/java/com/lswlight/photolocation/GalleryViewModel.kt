@@ -1,6 +1,8 @@
 package com.lswlight.photolocation
 
 import android.app.Application
+import android.content.IntentSender
+import android.os.Build
 import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
@@ -42,7 +44,19 @@ data class UiState(
     val anchorsManual: Boolean = false,
     /** 사진을 못 찾았을 때 보여줄 진단 정보 */
     val diagnostics: String = "",
+    /** 내보내기 진행 상황과 결과 안내 */
+    val exportProgress: Progress? = null,
+    val exportMessage: String? = null,
+    /** 사용자 허락이 필요한 시스템 요청 (사진 이동 / 휴지통). 화면에서 띄운다. */
+    val pendingRequest: PendingRequest? = null,
 )
+
+enum class RequestKind { MOVE, TRASH }
+
+data class PendingRequest(val sender: IntentSender, val kind: RequestKind)
+
+/** 한 번에 허락을 구하는 사진 수. 너무 많으면 시스템 요청이 실패할 수 있어 나눠서 묻는다. */
+private const val REQUEST_CHUNK = 1000
 
 const val NO_LOCATION = "위치 정보 없음"
 const val UNRESOLVED = "주소 확인 실패 (인터넷 연결 후 새로고침)"
@@ -57,6 +71,11 @@ private const val MIN_TRIP_PHOTOS = 3
 class GalleryViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repository = PhotoRepository(app)
+    private val exporter = Exporter(app)
+    private val moveQueue = ArrayDeque<List<Pair<Photo, String>>>()
+    private val trashQueue = ArrayDeque<List<android.net.Uri>>()
+    private var exportDone = 0
+    private var exportTotal = 0
     private val namer = LocationNamer(app)
     private val anchorStore = AnchorStore(app)
     private var home: Anchor? = null
@@ -309,4 +328,146 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
             centerLng = located.takeIf { it.isNotEmpty() }?.map { it.lng!! }?.average(),
         )
     }
+
+    // ---- PC 로 옮기기 위한 내보내기 ----
+
+    /** 원본은 두고 그룹 폴더로 복사한다. 이미 같은 이름이 있으면 건너뛴다. */
+    fun exportCopy(groups: List<PhotoGroup>) {
+        if (_state.value.exportProgress != null) return
+        viewModelScope.launch {
+            val total = groups.sumOf { it.photos.size }
+            var copied = 0
+            var skipped = 0
+            var failed = 0
+            var done = 0
+            withContext(Dispatchers.IO) {
+                for (group in groups) {
+                    val folder = exportFolder(group.name)
+                    val existing = exporter.existingNames(folder)
+                    for (photo in group.photos) {
+                        when {
+                            photo.name in existing -> skipped++
+                            exporter.copy(photo, folder) -> copied++
+                            else -> failed++
+                        }
+                        done++
+                        if (done % 10 == 0) setExportProgress("복사 중", done, total)
+                    }
+                }
+            }
+            finishExport(
+                "${copied}장을 복사했습니다." +
+                    (if (skipped > 0) " (이미 있는 ${skipped}장은 건너뜀)" else "") +
+                    (if (failed > 0) " 실패 ${failed}장." else "") + PC_GUIDE
+            )
+        }
+    }
+
+    /** 원본 파일을 그룹 폴더로 옮긴다. 먼저 사용자에게 수정 허락을 받는다. (Android 11+) */
+    fun exportMove(groups: List<PhotoGroup>) {
+        if (_state.value.exportProgress != null) return
+        if (Build.VERSION.SDK_INT < 30) {
+            _state.update { it.copy(exportMessage = "사진 이동은 Android 11 이상에서만 됩니다. '복사'를 이용해 주세요.") }
+            return
+        }
+        val items = groups.flatMap { g -> exportFolder(g.name).let { f -> g.photos.map { it to f } } }
+        moveQueue.clear()
+        moveQueue.addAll(items.chunked(REQUEST_CHUNK))
+        exportDone = 0
+        exportTotal = items.size
+        requestNextMove()
+    }
+
+    /** 내보내기 폴더(Pictures/사진위치분류)를 통째로 휴지통으로 보낸다. */
+    fun clearExported() {
+        if (_state.value.exportProgress != null) return
+        viewModelScope.launch {
+            val uris = withContext(Dispatchers.IO) { exporter.exportedUris() }
+            if (uris.isEmpty()) {
+                _state.update { it.copy(exportMessage = "분류 폴더가 이미 비어 있습니다.") }
+                return@launch
+            }
+            if (Build.VERSION.SDK_INT >= 30) {
+                trashQueue.clear()
+                trashQueue.addAll(uris.chunked(REQUEST_CHUNK))
+                exportTotal = uris.size
+                requestNextTrash()
+            } else {
+                val deleted = withContext(Dispatchers.IO) { uris.count { exporter.delete(it) } }
+                finishExport("${deleted}장을 지웠습니다.")
+            }
+        }
+    }
+
+    /** 시스템 허락 창의 결과 */
+    fun onRequestResult(granted: Boolean) {
+        val request = _state.value.pendingRequest ?: return
+        _state.update { it.copy(pendingRequest = null) }
+        if (!granted) {
+            moveQueue.clear()
+            trashQueue.clear()
+            finishExport("취소했습니다.")
+            return
+        }
+        when (request.kind) {
+            RequestKind.MOVE -> viewModelScope.launch {
+                val chunk = moveQueue.removeFirstOrNull() ?: return@launch
+                withContext(Dispatchers.IO) {
+                    for ((photo, folder) in chunk) {
+                        exporter.move(photo, folder)
+                        exportDone++
+                        if (exportDone % 10 == 0) setExportProgress("이동 중", exportDone, exportTotal)
+                    }
+                }
+                requestNextMove()
+            }
+            RequestKind.TRASH -> {
+                trashQueue.removeFirstOrNull()
+                requestNextTrash()
+            }
+        }
+    }
+
+    private fun requestNextMove() {
+        val chunk = moveQueue.firstOrNull()
+        if (chunk == null) {
+            finishExport("${exportTotal}장을 분류 폴더로 옮겼습니다." + PC_GUIDE)
+            return
+        }
+        setExportProgress("이동 허락 기다리는 중", exportDone, exportTotal)
+        val intent = MediaStore.createWriteRequest(
+            getApplication<Application>().contentResolver, chunk.map { it.first.uri }
+        )
+        _state.update { it.copy(pendingRequest = PendingRequest(intent.intentSender, RequestKind.MOVE)) }
+    }
+
+    private fun requestNextTrash() {
+        val chunk = trashQueue.firstOrNull()
+        if (chunk == null) {
+            finishExport("분류 폴더의 ${exportTotal}장을 휴지통으로 보냈습니다. 30일 안에는 갤러리 휴지통에서 되살릴 수 있습니다.")
+            return
+        }
+        setExportProgress("휴지통 허락 기다리는 중", 0, exportTotal)
+        val intent = MediaStore.createTrashRequest(
+            getApplication<Application>().contentResolver, chunk, true
+        )
+        _state.update { it.copy(pendingRequest = PendingRequest(intent.intentSender, RequestKind.TRASH)) }
+    }
+
+    private fun setExportProgress(message: String, done: Int, total: Int) {
+        _state.update { it.copy(exportProgress = Progress(message, done, total), exportMessage = null) }
+    }
+
+    private fun finishExport(message: String) {
+        _state.update { it.copy(exportProgress = null, exportMessage = message) }
+        // 파일 위치가 바뀌었으므로 다시 스캔
+        scheduleScan()
+    }
+
+    fun clearExportMessage() {
+        _state.update { it.copy(exportMessage = null) }
+    }
 }
+
+private const val PC_GUIDE =
+    "\n\nPC 에 USB 로 연결한 뒤 '내 PC › 휴대폰 › 내장 메모리 › Pictures › 사진위치분류' 폴더를 복사하세요."

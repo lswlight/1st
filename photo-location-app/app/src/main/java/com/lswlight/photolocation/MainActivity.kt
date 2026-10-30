@@ -1,6 +1,7 @@
 package com.lswlight.photolocation
 
 import android.Manifest
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -15,6 +16,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -45,10 +47,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -184,6 +189,29 @@ private fun App(vm: GalleryViewModel = viewModel()) {
         return
     }
 
+    var exporting by rememberSaveable { mutableStateOf(false) }
+
+    // 사진 이동 / 휴지통 보내기 허락 창
+    val requestLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result -> vm.onRequestResult(result.resultCode == Activity.RESULT_OK) }
+    LaunchedEffect(state.pendingRequest) {
+        state.pendingRequest?.let { requestLauncher.launch(IntentSenderRequest.Builder(it.sender).build()) }
+    }
+
+    if (exporting) {
+        BackHandler { exporting = false }
+        ExportScreen(
+            state = state,
+            onBack = { exporting = false },
+            onCopy = vm::exportCopy,
+            onMove = vm::exportMove,
+            onClear = vm::clearExported,
+            onDismissMessage = vm::clearExportMessage,
+        )
+        return
+    }
+
     val group = state.groups.firstOrNull { it.name == openGroup }
     val photo = group?.photos?.firstOrNull { it.id == openPhotoId }
 
@@ -218,6 +246,7 @@ private fun App(vm: GalleryViewModel = viewModel()) {
             onPickMore = { launcher.launch(mediaPermissions()) },
             locationPermission = context.granted(Manifest.permission.ACCESS_MEDIA_LOCATION),
             onRefresh = vm::scan,
+            onExport = { exporting = true },
             onLevel = vm::setLevel,
             onResetAnchors = vm::resetAnchors,
             onSetByAddress = { name, query ->
@@ -261,6 +290,7 @@ private fun GroupListScreen(
     onPickMore: () -> Unit,
     locationPermission: Boolean,
     onRefresh: () -> Unit,
+    onExport: () -> Unit,
     onLevel: (GroupLevel) -> Unit,
     onResetAnchors: () -> Unit,
     onSetByAddress: (name: String, query: String) -> Unit,
@@ -271,6 +301,9 @@ private fun GroupListScreen(
             TopAppBar(
                 title = { Text("사진 위치 분류") },
                 actions = {
+                    IconButton(onClick = onExport, enabled = state.loaded && state.progress == null) {
+                        Icon(Icons.Default.Share, contentDescription = "PC로 내보내기")
+                    }
                     IconButton(onClick = onRefresh, enabled = state.progress == null) {
                         Icon(Icons.Default.Refresh, contentDescription = "새로고침")
                     }
@@ -418,6 +451,159 @@ private fun AccessCard(text: String, onPickMore: (() -> Unit)?) {
                     TextButton(onClick = onPickMore) { Text("사진 더 선택") }
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExportScreen(
+    state: UiState,
+    onBack: () -> Unit,
+    onCopy: (List<PhotoGroup>) -> Unit,
+    onMove: (List<PhotoGroup>) -> Unit,
+    onClear: () -> Unit,
+    onDismissMessage: () -> Unit,
+) {
+    var move by rememberSaveable { mutableStateOf(false) }
+    // 위치 없는 사진은 기본으로 빼 둔다.
+    var selected by remember(state.level) {
+        mutableStateOf(state.groups.map { it.name }.filter { it != NO_LOCATION && it != UNRESOLVED }.toSet())
+    }
+    var confirm by remember { mutableStateOf<String?>(null) }
+    val chosen = state.groups.filter { it.name in selected }
+    val count = chosen.sumOf { it.photos.size }
+    val running = state.exportProgress != null || state.pendingRequest != null
+
+    when (confirm) {
+        "move" -> AlertDialog(
+            onDismissRequest = { confirm = null },
+            title = { Text("원본 사진을 옮길까요?") },
+            text = {
+                Text(
+                    "${count}장의 원본이 'Pictures/사진위치분류' 아래 그룹 폴더로 옮겨집니다. " +
+                        "갤러리 앱에서는 계속 보이지만 원래 폴더(카메라 등)에서는 빠집니다.\n\n" +
+                        "다음 화면에서 시스템이 수정 허락을 묻습니다."
+                )
+            },
+            confirmButton = { TextButton(onClick = { confirm = null; onMove(chosen) }) { Text("옮기기") } },
+            dismissButton = { TextButton(onClick = { confirm = null }) { Text("취소") } },
+        )
+        "clear" -> AlertDialog(
+            onDismissRequest = { confirm = null },
+            title = { Text("분류 폴더를 비울까요?") },
+            text = {
+                Text(
+                    "'Pictures/사진위치분류' 안의 사진을 모두 휴지통으로 보냅니다.\n\n" +
+                        "• 복사로 내보냈다면: 복사본만 지워지고 원본은 남습니다.\n" +
+                        "• 이동으로 내보냈다면: 폰에서 사진이 사라집니다. PC 로 옮긴 것을 꼭 확인하세요.\n\n" +
+                        "휴지통에서 30일 안에는 되살릴 수 있습니다."
+                )
+            },
+            confirmButton = { TextButton(onClick = { confirm = null; onClear() }) { Text("휴지통으로") } },
+            dismissButton = { TextButton(onClick = { confirm = null }) { Text("취소") } },
+        )
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("PC로 내보내기") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
+            item {
+                Column(Modifier.padding(16.dp)) {
+                    Text(
+                        "선택한 그룹을 폰의 'Pictures/사진위치분류/그룹이름' 폴더로 정리합니다. " +
+                            "정리된 폴더를 USB 로 PC 에 복사한 뒤, 아래 '분류 폴더 비우기'로 폰에서 지우면 됩니다.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text("현재 분류 기준: ${state.level.label}", style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(12.dp))
+                    ModeRow(!move, "복사", "원본은 그대로 두고 복사본을 만듭니다. 그만큼 저장 공간을 더 씁니다.") { move = false }
+                    ModeRow(move, "이동", "원본 파일을 그룹 폴더로 옮깁니다. 저장 공간을 더 쓰지 않습니다.") { move = true }
+                    Spacer(Modifier.height(12.dp))
+                    state.exportProgress?.let { p ->
+                        Text("${p.message}… ${p.done} / ${p.total}", style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(6.dp))
+                        LinearProgressIndicator(
+                            progress = { if (p.total == 0) 0f else p.done.toFloat() / p.total },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    state.exportMessage?.let { msg ->
+                        Card(Modifier.fillMaxWidth().clickable(onClick = onDismissMessage)) {
+                            Text(msg, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(12.dp))
+                        }
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    Button(
+                        onClick = { if (move) confirm = "move" else onCopy(chosen) },
+                        enabled = count > 0 && !running,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(if (move) "${count}장 옮기기" else "${count}장 복사하기") }
+                }
+            }
+            item {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("그룹 선택", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { selected = state.groups.map { it.name }.toSet() }) { Text("전체") }
+                    TextButton(onClick = { selected = emptySet() }) { Text("해제") }
+                }
+            }
+            items(state.groups, key = { it.name }) { group ->
+                Row(
+                    Modifier.fillMaxWidth()
+                        .clickable { selected = if (group.name in selected) selected - group.name else selected + group.name }
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(checked = group.name in selected, onCheckedChange = null, modifier = Modifier.padding(8.dp))
+                    Text(group.name, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${group.photos.size}장", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(end = 8.dp))
+                }
+            }
+            item {
+                Column(Modifier.padding(16.dp)) {
+                    HorizontalDivider()
+                    Spacer(Modifier.height(12.dp))
+                    Text("PC 로 옮긴 다음", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "PC 에 'Pictures/사진위치분류' 폴더를 복사했다면 폰의 분류 폴더를 비워 공간을 확보하세요.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = { confirm = "clear" }, enabled = !running, modifier = Modifier.fillMaxWidth()) {
+                        Text("분류 폴더 비우기 (휴지통으로)")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModeRow(selected: Boolean, title: String, desc: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = null, modifier = Modifier.padding(end = 8.dp))
+        Column {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Text(desc, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
