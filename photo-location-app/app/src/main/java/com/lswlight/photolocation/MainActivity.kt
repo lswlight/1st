@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -74,6 +75,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -142,6 +144,13 @@ private fun App(vm: GalleryViewModel = viewModel()) {
     ) {
         hasPermission = context.canReadPhotos()
         if (hasPermission) vm.scan()
+    }
+
+    // 설정에서 권한을 바꾸고 돌아오거나, 카메라로 찍고 돌아오면 자동으로 새 사진을 확인한다.
+    LifecycleResumeEffect(Unit) {
+        hasPermission = context.canReadPhotos()
+        if (hasPermission) vm.onResume()
+        onPauseOrDispose { vm.onPause() }
     }
 
     LaunchedEffect(hasPermission) {
@@ -288,7 +297,10 @@ private fun GroupRow(group: PhotoGroup, onClick: () -> Unit) {
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text("${group.photos.size}장", style = MaterialTheme.typography.bodySmall)
+            Text(
+                "${group.photos.size}장 · ${dateRange(group.photos)}",
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
         Icon(Icons.Default.KeyboardArrowRight, contentDescription = null)
     }
@@ -308,6 +320,8 @@ private fun Thumbnail(photo: Photo, modifier: Modifier) {
 @Composable
 private fun GroupScreen(group: PhotoGroup, onBack: () -> Unit, onPhoto: (Photo) -> Unit) {
     val context = LocalContext.current
+    // 사진은 최신순으로 정렬돼 있으므로 groupBy 결과도 최신 날짜부터 나온다.
+    val days = remember(group) { group.photos.groupBy { DAY_FORMAT.format(Date(it.dateTaken)) } }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -339,8 +353,17 @@ private fun GroupScreen(group: PhotoGroup, onBack: () -> Unit, onPhoto: (Photo) 
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            items(group.photos, key = { it.id }) { photo ->
-                Thumbnail(photo, Modifier.aspectRatio(1f).clickable { onPhoto(photo) })
+            days.forEach { (day, photos) ->
+                item(key = "day:$day", span = { GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        "$day · ${photos.size}장",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 6.dp),
+                    )
+                }
+                items(photos, key = { it.id }) { photo ->
+                    Thumbnail(photo, Modifier.aspectRatio(1f).clickable { onPhoto(photo) })
+                }
             }
         }
     }
@@ -396,6 +419,16 @@ private fun PhotoScreen(photo: Photo, onBack: () -> Unit) {
             }
         }
     }
+}
+
+private val DAY_FORMAT = SimpleDateFormat("yyyy년 M월 d일 (E)", Locale.KOREAN)
+private val SHORT_FORMAT = SimpleDateFormat("yyyy.M.d", Locale.KOREAN)
+
+/** 그룹 사진들의 촬영 기간 (예: 2024.3.1 ~ 2026.10.30) */
+private fun dateRange(photos: List<Photo>): String {
+    val first = SHORT_FORMAT.format(Date(photos.minOf { it.dateTaken }))
+    val last = SHORT_FORMAT.format(Date(photos.maxOf { it.dateTaken }))
+    return if (first == last) first else "$first ~ $last"
 }
 
 private fun openMap(context: Context, lat: Double, lng: Double, label: String) {

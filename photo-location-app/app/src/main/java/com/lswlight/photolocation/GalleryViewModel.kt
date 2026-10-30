@@ -1,9 +1,15 @@
 package com.lswlight.photolocation
 
 import android.app.Application
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,10 +49,56 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     private var photos: List<Photo> = emptyList()
+    private var scanJob: Job? = null
+    private var pendingJob: Job? = null
+
+    /** 마지막 스캔 이후 사진이 추가·삭제됐는지 */
+    private var dirty = false
+    /** 앱 화면이 보이고 있는지 */
+    private var resumed = false
+
+    // 카메라로 새로 찍거나 지운 사진을 감지한다.
+    private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            dirty = true
+            if (resumed) scheduleScan()
+        }
+    }
+
+    init {
+        app.contentResolver.registerContentObserver(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, observer
+        )
+    }
+
+    override fun onCleared() {
+        getApplication<Application>().contentResolver.unregisterContentObserver(observer)
+    }
+
+    /** 화면으로 돌아왔을 때: 그사이 사진이 바뀌었으면 다시 스캔한다. */
+    fun onResume() {
+        resumed = true
+        if (dirty) scheduleScan()
+    }
+
+    fun onPause() {
+        resumed = false
+    }
+
+    // 사진 여러 장을 연속으로 찍을 때 매번 스캔하지 않도록 잠시 모아서 한 번만 실행한다.
+    private fun scheduleScan() {
+        pendingJob?.cancel()
+        pendingJob = viewModelScope.launch {
+            delay(1500)
+            scan()
+        }
+    }
 
     fun scan() {
-        if (_state.value.progress != null) return
-        viewModelScope.launch {
+        // 스캔 중에 들어온 변경은 dirty 로 남겨 두었다가 끝난 뒤 다시 처리한다.
+        if (scanJob?.isActive == true) return
+        dirty = false
+        scanJob = viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 photos = repository.loadPhotos { done, total ->
                     _state.update { it.copy(progress = Progress("사진 위치 읽는 중", done, total)) }
@@ -70,6 +122,7 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
                     groups = buildGroups(it.level),
                 )
             }
+            if (dirty && resumed) scheduleScan()
         }
     }
 
