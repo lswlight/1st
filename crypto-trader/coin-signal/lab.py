@@ -149,6 +149,123 @@ def collect(symbols, tf, setups, exits, filters, f, refresh, cost_of, log):
     return out
 
 
+ENTRIES = {
+    "close": "돌파 봉 종가에 바로",
+    "zone_mid": "종가와 돌파 기준선(직전 봉 상단) 중간에 지정가",
+    "zone_low": "돌파 기준선(직전 봉 상단)까지 되돌리면 지정가",
+}
+
+
+def entry_levels(bars, ind, i):
+    """스퀴즈 돌파 봉 i 의 진입 범위: (기준선 = 직전 봉 상단 밴드, 종가)."""
+    return ind[i - 1]["bb"]["up"], bars[i]["c"]
+
+
+def fill_limit(bars, i, limit, window):
+    """신호 다음 봉부터 window 봉 안에 지정가 limit 에 체결되면 (봉 번호, 체결가). 시가가 더 낮으면 시가에 체결."""
+    for j in range(i + 1, min(len(bars), i + 1 + window)):
+        b = bars[j]
+        if b["o"] <= limit:
+            return j, b["o"]
+        if b["l"] <= limit:
+            return j, limit
+    return None
+
+
+def entry_trade(bars, ind, i, tr, entry_mode, exit_mode, hold, trail_hold, window):
+    """진입 방식에 따라 체결한 뒤 청산까지. 체결 안 되면 None. 체결 봉에서 손절가에 닿으면 손절로 본다."""
+    if entry_mode == "close":
+        return exit_trade(bars, ind, i, tr, exit_mode, hold, trail_hold) + (tr["entry"],)
+    level, close = entry_levels(bars, ind, i)
+    limit = (level + close) / 2 if entry_mode == "zone_mid" else level
+    if limit >= close:
+        return exit_trade(bars, ind, i, tr, exit_mode, hold, trail_hold) + (tr["entry"],)
+    got = fill_limit(bars, i, limit, window)
+    if not got:
+        return None
+    j, px = got
+    if px <= tr["stop"]:
+        return None                       # 손절가 아래에서 체결될 자리면 들어가지 않는다
+    t2 = dict(tr, entry=px, risk=px - tr["stop"])
+    if bars[j]["l"] <= tr["stop"]:
+        return "stop", -1.0, j, px
+    return exit_trade(bars, ind, j, t2, exit_mode, hold, trail_hold) + (px,)
+
+
+def cmd_entry(args):
+    """스퀴즈 돌파의 진입 방식 비교: 종가 / 범위 중간 지정가 / 기준선 지정가."""
+    cfg = crt.config(args.config)
+    f = crt.Fetcher()
+    symbols = [crt.normalize(r["symbol"]) for r in crt.load_universe(None, "universe-crypto.txt")]
+    cost = 2 * cfg["binance_fee_pct"] / 100
+    log = (lambda m: print(m, file=sys.stderr)) if not args.quiet else (lambda m: None)
+    report = {"made": crt.now_kst().isoformat(), "window": {}, "results": []}
+    print("스퀴즈 돌파 진입 방식 비교: 코인 %d개, 수수료 후, 앞 %d%% / 뒤 %d%% 기간" % (
+        len(symbols), args.split * 100, 100 - args.split * 100))
+    for tf in args.tf.split(","):
+        spec = TFS[tf]
+        window = {"1d": 3, "4h": 6, "1h": 12}[tf]
+        report["window"][tf] = window
+        res = {(e, x): [] for e in ENTRIES for x in ("fixed2r", "trail")}
+        signals = 0
+        zone_w = []
+        for s in symbols:
+            try:
+                bars = cached_bars(f, s, tf, args.refresh)
+            except crt.CrtError:
+                continue
+            if len(bars) < 200:
+                continue
+            ind = pts.indicators(bars)
+            busy = {k: -1 for k in res}
+            for i in range(60, len(bars) - 1):
+                for setup, ref, t1 in pts.setups_at(bars, ind, i):
+                    if setup != "squeeze_break":
+                        continue
+                    tr = pts.make_trade(bars, i, setup, ref, t1, "crypto", crt.quote_of(s),
+                                        max_risk_pct=spec["max_risk"])
+                    if not tr:
+                        continue
+                    signals += 1
+                    level, close = entry_levels(bars, ind, i)
+                    zone_w.append((close - level) / close * 100)
+                    for (em, xm), lst in res.items():
+                        if i <= busy[(em, xm)]:
+                            continue
+                        out = entry_trade(bars, ind, i, tr, em, xm, spec["hold"], spec["trail_hold"], window)
+                        if not out or out[0] == "open":
+                            lst.append(None)
+                            continue
+                        outcome, r, j, px = out
+                        busy[(em, xm)] = j
+                        lst.append({"sym": s, "entry_t": bars[i]["t"], "exit_t": bars[j]["t"], "bars": j - i,
+                                    "r": r, "rnet": r - cost * px / (px - tr["stop"]), "outcome": outcome})
+            log("  %s %s 끝" % (tf, s))
+        all_t = [t["entry_t"] for lst in res.values() for t in lst if t]
+        lo, hi = min(all_t), max(all_t)
+        cut = lo + (hi - lo) * args.split
+        print("\n[%s] 신호 %d개, 돌파 봉 종가가 기준선보다 평균 %.1f%% 위 (중앙값 %.1f%%), 지정가는 %d봉 안에 체결돼야 인정" % (
+            spec["label"], signals, statistics.fmean(zone_w), statistics.median(zone_w), window))
+        for (em, xm), lst in res.items():
+            done = [t for t in lst if t]
+            fill = len(done) / len(lst) * 100 if lst else 0
+            st_all = summarize(done)
+            st_is = summarize([t for t in done if t["entry_t"] < cut])
+            st_oos = summarize([t for t in done if t["entry_t"] >= cut])
+            per_signal = sum(t["rnet"] for t in done) / len(lst) if lst else 0
+            print("  %s · %s  (체결 %.0f%%, 신호 1개당 %+.3fR)" % (ENTRIES[em], EXITS[xm], fill, per_signal))
+            print("     전체 %s" % fmt(st_all))
+            print("     앞   %s" % fmt(st_is))
+            print("     뒤   %s" % fmt(st_oos))
+            report["results"].append({"tf": tf, "entry": em, "exit": xm, "fill_pct": fill,
+                                      "per_signal": per_signal, "all": st_all, "in_sample": st_is,
+                                      "out_of_sample": st_oos})
+    print("\n'신호 1개당'은 체결 안 된 신호를 0R로 넣은 평균이라 진입 방식끼리 공정하게 비교된다.")
+    if args.write:
+        print("저장: %s" % crt.save_json(args.write, report))
+    return 0
+
+
 def fmt(st):
     if not st:
         return "  -"
@@ -223,6 +340,13 @@ def cmd_run(args):
 def main(argv=None):
     ap = argparse.ArgumentParser(description="볼린저 셋업 검증실 (coin-signal lab)")
     sub = ap.add_subparsers(dest="cmd", required=True)
+    q = sub.add_parser("entry", help="스퀴즈 돌파 진입 방식 비교")
+    q.add_argument("--tf", default="1d,4h")
+    q.add_argument("--split", type=float, default=0.6)
+    q.add_argument("--refresh", action="store_true")
+    q.add_argument("--quiet", action="store_true")
+    q.add_argument("--config", default="config.json")
+    q.add_argument("--write", nargs="?", const="lab-entry.json")
     p = sub.add_parser("run")
     p.add_argument("--tf", default="1d,4h,1h")
     p.add_argument("--setups", default="squeeze_break,mid_pullback,lower_reentry")
@@ -237,7 +361,7 @@ def main(argv=None):
     p.add_argument("--evidence", action="store_true", help="coin-signal/evidence.json 을 새로 쓴다")
     args = ap.parse_args(argv)
     try:
-        return cmd_run(args)
+        return cmd_entry(args) if args.cmd == "entry" else cmd_run(args)
     except crt.CrtError as e:
         print(str(e))
         return 1

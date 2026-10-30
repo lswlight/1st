@@ -152,6 +152,30 @@ def make_trade(bars, i, setup, stop_ref, t1, market, quote, r_target=2.0, max_ri
             "t1": first, "t2": t2, "r": (target - entry) / risk}
 
 
+CHASE_PCT = 30   # 진입가가 이만큼(손절폭 대비 %) 넘게 오르면 손절폭이 커져 추격 상한으로 본다
+
+
+def entry_zone(bars, ind, i, tr, market="crypto", quote="USDT"):
+    """스퀴즈 돌파의 진입 범위.
+    30개 코인 검증(lab.py entry)에서 돌파 봉 종가에 바로 사는 쪽이 되돌림 지정가보다 신호당 성적이 좋았다
+    (되돌림을 기다리면 가장 크게 오르는 신호를 놓친다). 그래서 종가가 1순위, 범위 중간까지가 허용 하단,
+    손절폭이 CHASE_PCT% 넘게 커지는 가격이 추격 상한이다."""
+    level = ind[i - 1]["bb"]["up"]
+    close = bars[i]["c"]
+    stop = tr["stop"]
+    low = (level + close) / 2
+    chase = close + (close - stop) * CHASE_PCT / 100
+    return {"level": crt.round_down(level, market, quote), "low": crt.round_down(low, market, quote),
+            "best": close, "chase": crt.round_near(chase, market, quote), "stop": stop}
+
+
+def zone_text(z, market="crypto"):
+    ps = lambda x: crt.price_str(x, market)  # noqa: E731
+    return ("진입 범위 %s ~ %s (1순위: 종가 %s 부근에서 바로), 추격 상한 %s, 첫 손절 %s. "
+            "돌파 기준선 %s 아래로 되돌리면 신호가 약해진 것" % (
+                ps(z["low"]), ps(z["best"]), ps(z["best"]), ps(z["chase"]), ps(z["stop"]), ps(z["level"])))
+
+
 def modes_for(setup):
     """셋업별로 보는 청산 방식. 하단 복귀는 목표가 중심선 하나뿐이다."""
     return ["target"] if setup == "lower_reentry" else ["fixed2r", "trail"]
@@ -317,6 +341,8 @@ def analyze(symbol, tf, f, cfg, now, scan=False):
         tr = make_trade(bars, i, setup, ref, t1, market, quote, max_risk_pct=spec["max_risk_pct"])
         if tr:
             tr["divergence"] = setup == "lower_reentry" and divergence(bars, ind, i)
+            if setup == "squeeze_break":
+                tr["zone"] = entry_zone(bars, ind, i, tr, market, quote)
             sigs.append(tr)
     bb = ind[i]["bb"]
     return {"symbol": symbol, "tf": tf, "market": market, "quote": quote, "bar_time": bars[i]["t"],
@@ -356,6 +382,8 @@ def print_tf(a, ev=None):
             extra = " + RSI 상승 다이버전스" if s.get("divergence") else ""
             print("  ★ 신호: %s%s (%s 종가 기준)" % (SETUP_KO[s["setup"]], extra, when))
             print("     진입 %s / 첫 손절 %s (-%.2f%%)" % (ps(s["entry"]), ps(s["stop"]), s["risk"] / s["entry"] * 100))
+            if s.get("zone"):
+                print("     " + zone_text(s["zone"], m))
             for mode in modes_for(s["setup"]):
                 if mode == "trail":
                     plan = "%s 종가가 중심선 아래로 마감하면 정리 (지금 중심선 %s)" % (spec["label"], ps(a["bb"]["mid"]))

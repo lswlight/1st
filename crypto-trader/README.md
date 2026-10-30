@@ -11,7 +11,7 @@
 
 | 명령 | 하는 일 |
 | --- | --- |
-| `/coin-signal` | 볼린저 단기(4시간봉)·중기(일봉) 매수 타점: 스퀴즈 돌파·중심선 눌림·하단 복귀. 청산 두 가지(고정 2R, 중심선 이탈 추적)의 이 코인 성적과 30개 합산 검증 등급, 보유 관리(`manage`), 검증실(`lab.py`) |
+| `/coin-signal` | 볼린저 단기(4시간봉)·중기(일봉) 매수 타점: 스퀴즈 돌파·중심선 눌림·하단 복귀. 청산 두 가지(고정 2R, 중심선 이탈 추적)의 이 코인 성적과 30개 합산 검증 등급, 보유 관리(`manage`), 스퀴즈 돌파 알람(`alert.py`, 진입 범위 포함), 검증실(`lab.py`) |
 | `/coin-scanner` | 일봉 셋업(볼린저 스퀴즈 돌파·스퀴즈 진행·하단 복귀, 20일 신고가, 20일선 회복, 과매도), 09:00~09:15 범위 고점 돌파. 바이낸스 거래대금 상위 30개 |
 | `/coin-plan` | 진입 신호 확인, 손절·목표, 원화 계좌 기준 수량 (USDT 가격을 업비트 USDT 원화가로 환산, 수수료 포함), 김치 프리미엄 |
 | `/coin-timemachine` | 계획을 최근 60일 5분봉으로 1만 번 재현 + 같은 규칙의 과거 실제 결과 |
@@ -28,7 +28,8 @@
 crypto-trader/
 ├── lib/crt.py                  # 공통: 바이낸스·업비트 데이터, 볼린저·RSI, 호가 근사, 환율·김치 프리미엄
 ├── coin-signal/points.py       # now / scan / manage / backtest (단기·중기 타점)
-├── coin-signal/lab.py          # 여러 코인 합산 검증 -> coin-signal/evidence.json
+├── coin-signal/alert.py        # 스퀴즈 돌파 알람 (확정·진행 중, 진입 범위)
+├── coin-signal/lab.py          # 여러 코인 합산 검증 -> coin-signal/evidence.json, 진입 방식 비교
 ├── coin-scanner/               # scan.py, 종목 목록(universe-crypto.txt 바이낸스, universe-upbit.txt 업비트)
 ├── coin-plan/plan.py           # entry / exit / size / show
 ├── coin-timemachine/tm.py      # run
@@ -47,6 +48,7 @@ python3 crypto-trader/coin-signal/points.py now SOL                  # 단기+�
 python3 crypto-trader/coin-signal/points.py scan --tf mid            # 30개 중기 타점
 python3 crypto-trader/coin-signal/points.py manage SOL --entry 96 --stop 92   # 보유 중: 유지/정리 신호
 python3 crypto-trader/coin-signal/points.py backtest BTC --tf both   # 셋업·청산별 과거 성적
+python3 crypto-trader/coin-signal/alert.py check                     # 스퀴즈 돌파 알람 (새 것만)
 python3 crypto-trader/coin-signal/lab.py run --tf 1d,4h --evidence   # 합산 검증 (첫 실행은 데이터 받느라 수 분)
 python3 crypto-trader/coin-scanner/scan.py daily                     # 일봉 셋업 스캔
 python3 crypto-trader/coin-plan/plan.py exit --symbol SOL --entry 96.02 --or-high 95.78 --or-low 95.11 --entry-time 12:10
@@ -68,6 +70,7 @@ python3 -m unittest discover -s crypto-trader/tests -v
 
 - 추적 청산은 수익이 큰 몇 건에 몰린다: 일봉 스퀴즈 추적에서 상위 10건을 빼면 평균 +0.05R, 대형 코인 10개만 보면 +0.47R.
 - 가장 고르게 통한 것은 **일봉 스퀴즈 돌파 · 고정 2R** (상위 10건을 빼도 +0.12R, 대형 10개만 +0.21R).
+- 진입은 돌파 봉 종가에 바로 사는 쪽이 되돌림 지정가보다 신호당 성적이 좋았다 (되돌림을 기다리면 크게 오르는 신호를 놓친다).
 - 1시간봉은 모두 수수료에 져서 단기 시간축을 4시간봉으로 바꿨다. BTC 추세 필터는 효과가 일정하지 않았다.
 - 지금 거래대금 상위 코인으로만 본 결과라 생존 편향이 있고, 앞으로도 같다는 보장은 없다. 자세한 수치는 `coin-signal/evidence.json`.
 
