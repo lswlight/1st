@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -126,41 +127,57 @@ private fun mediaPermissions(): Array<String> = when {
 private fun Context.granted(permission: String) =
     checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
 
-/** 사진 읽기 권한(전체 또는 Android 14 의 '선택한 사진만')이 있는지 */
-private fun Context.canReadPhotos(): Boolean = when {
-    Build.VERSION.SDK_INT >= 34 -> granted(Manifest.permission.READ_MEDIA_IMAGES) ||
-        granted(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
-    Build.VERSION.SDK_INT >= 33 -> granted(Manifest.permission.READ_MEDIA_IMAGES)
-    else -> granted(Manifest.permission.READ_EXTERNAL_STORAGE)
+private enum class PhotoAccess { NONE, PARTIAL, FULL }
+
+/** 사진 읽기 권한 상태. PARTIAL 은 Android 14+ 의 '선택한 사진만 허용' */
+private fun Context.photoAccess(): PhotoAccess {
+    val full = when {
+        Build.VERSION.SDK_INT >= 33 -> granted(Manifest.permission.READ_MEDIA_IMAGES)
+        else -> granted(Manifest.permission.READ_EXTERNAL_STORAGE)
+    }
+    return when {
+        full -> PhotoAccess.FULL
+        Build.VERSION.SDK_INT >= 34 && granted(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) ->
+            PhotoAccess.PARTIAL
+        else -> PhotoAccess.NONE
+    }
+}
+
+private fun openAppSettings(context: Context) {
+    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+    startSafely(context, intent)
 }
 
 @Composable
 private fun App(vm: GalleryViewModel = viewModel()) {
     val context = LocalContext.current
     val state by vm.state.collectAsStateWithLifecycle()
-    var hasPermission by remember { mutableStateOf(context.canReadPhotos()) }
+    var access by remember { mutableStateOf(context.photoAccess()) }
     var openGroup by rememberSaveable { mutableStateOf<String?>(null) }
     var openPhotoId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
-        hasPermission = context.canReadPhotos()
-        if (hasPermission) vm.scan()
+        val before = access
+        access = context.photoAccess()
+        // '사진 더 선택'처럼 권한 상태는 그대로인데 볼 수 있는 사진이 바뀐 경우도 다시 스캔한다.
+        if (access != PhotoAccess.NONE && access == before) vm.scan()
     }
 
     // 설정에서 권한을 바꾸고 돌아오거나, 카메라로 찍고 돌아오면 자동으로 새 사진을 확인한다.
     LifecycleResumeEffect(Unit) {
-        hasPermission = context.canReadPhotos()
-        if (hasPermission) vm.onResume()
+        access = context.photoAccess()
+        if (access != PhotoAccess.NONE) vm.onResume()
         onPauseOrDispose { vm.onPause() }
     }
 
-    LaunchedEffect(hasPermission) {
-        if (hasPermission && !state.loaded) vm.scan()
+    // 처음 허용했을 때, 그리고 '선택한 사진만' ↔ '모두 허용'이 바뀌었을 때 다시 스캔한다.
+    LaunchedEffect(access) {
+        if (access != PhotoAccess.NONE) vm.scan()
     }
 
-    if (!hasPermission) {
+    if (access == PhotoAccess.NONE) {
         PermissionScreen { launcher.launch(mediaPermissions()) }
         return
     }
@@ -190,6 +207,8 @@ private fun App(vm: GalleryViewModel = viewModel()) {
         }
         else -> GroupListScreen(
             state = state,
+            partialAccess = access == PhotoAccess.PARTIAL,
+            onPickMore = { launcher.launch(mediaPermissions()) },
             locationPermission = context.granted(Manifest.permission.ACCESS_MEDIA_LOCATION),
             onRefresh = vm::scan,
             onLevel = vm::setLevel,
@@ -224,6 +243,8 @@ private fun PermissionScreen(onRequest: () -> Unit) {
 @Composable
 private fun GroupListScreen(
     state: UiState,
+    partialAccess: Boolean,
+    onPickMore: () -> Unit,
     locationPermission: Boolean,
     onRefresh: () -> Unit,
     onLevel: (GroupLevel) -> Unit,
@@ -277,7 +298,16 @@ private fun GroupListScreen(
             if (!locationPermission) {
                 Notice("사진 위치 접근 권한이 없어 GPS 좌표가 가려집니다. 설정 › 앱 › 권한에서 허용해 주세요.")
             }
-            if (state.loaded && state.level == GroupLevel.LIFE) {
+            if (partialAccess) {
+                AccessCard(
+                    "지금은 '선택한 사진만' 볼 수 있게 허용되어 있어 일부 사진만 분류됩니다. " +
+                        "갤러리 전체를 분류하려면 설정에서 사진 권한을 '모두 허용'으로 바꿔 주세요.",
+                    onPickMore = onPickMore,
+                )
+            } else if (state.loaded && state.totalPhotos == 0) {
+                AccessCard("사진을 찾지 못했습니다. 설정에서 사진 권한이 '모두 허용'인지 확인해 주세요.", onPickMore = null)
+            }
+            if (state.loaded && state.level == GroupLevel.LIFE && state.totalPhotos > 0) {
                 AnchorCard(state, onResetAnchors)
             }
             if (state.geocoderMissing) {
@@ -308,6 +338,22 @@ private fun AnchorCard(state: UiState, onReset: () -> Unit) {
             )
             if (state.anchorsManual) {
                 TextButton(onClick = onReset) { Text("자동 감지로 되돌리기") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccessCard(text: String, onPickMore: (() -> Unit)?) {
+    val context = LocalContext.current
+    Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+        Column(Modifier.padding(12.dp)) {
+            Text(text, style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { openAppSettings(context) }) { Text("설정에서 모두 허용") }
+                if (onPickMore != null) {
+                    TextButton(onClick = onPickMore) { Text("사진 더 선택") }
+                }
             }
         }
     }
