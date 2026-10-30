@@ -44,7 +44,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
@@ -394,8 +396,26 @@ private fun AnchorCard(
             onDismiss = { addressFor = null },
         )
     }
+    // 평소에는 한 줄로 접어 두고, 눌렀을 때만 설정을 펼친다.
+    var expanded by rememberSaveable { mutableStateOf(false) }
     Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-        Column(Modifier.padding(12.dp)) {
+        Row(
+            Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "📍 집·회사 설정",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.weight(1f))
+            Icon(
+                if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                contentDescription = if (expanded) "접기" else "펼치기",
+            )
+        }
+        if (!expanded) return@Card
+        Column(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
             Text("집: ${state.homeText ?: "찾지 못함"}", style = MaterialTheme.typography.bodySmall)
             Text("회사: ${state.workText ?: "찾지 못함"}", style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(4.dp))
