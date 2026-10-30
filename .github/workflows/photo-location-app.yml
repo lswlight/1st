@@ -10,6 +10,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: photo-location-app
@@ -28,3 +30,16 @@ jobs:
         with:
           name: photo-location-apk
           path: photo-location-app/app/build/outputs/apk/debug/app-debug.apk
+      # 휴대폰 브라우저에서 바로 받을 수 있도록 고정 주소의 릴리스에 apk 를 올린다.
+      # https://github.com/lswlight/1st/releases/download/photo-app-latest/photo-location.apk
+      - name: 릴리스용 파일 이름 정리
+        run: cp app/build/outputs/apk/debug/app-debug.apk photo-location.apk
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: photo-app-latest
+          name: 사진 위치 분류 앱 (최신)
+          target_commitish: ${{ github.sha }}
+          body: |
+            휴대폰에서 아래 photo-location.apk 를 눌러 받은 뒤 설치하세요.
+            빌드 커밋: ${{ github.sha }}
+          files: photo-location-app/photo-location.apk
