@@ -41,6 +41,7 @@ data class UiState(
     val groups: List<PhotoGroup> = emptyList(),
     val totalPhotos: Int = 0,
     val locatedPhotos: Int = 0,
+    val totalVideos: Int = 0,
     val geocoderMissing: Boolean = false,
     val loaded: Boolean = false,
     /** 집/회사 위치 설명. null 이면 찾지 못함 */
@@ -126,6 +127,12 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
         resumed = false
     }
 
+    /** 권한이 바뀌어 볼 수 있는 항목이 달라졌을 때. 스캔 중이면 끝난 뒤 한 번 더 스캔한다. */
+    fun rescan() {
+        dirty = true
+        scheduleScan()
+    }
+
     // 사진 여러 장을 연속으로 찍을 때 매번 스캔하지 않도록 잠시 모아서 한 번만 실행한다.
     private fun scheduleScan() {
         pendingJob?.cancel()
@@ -160,6 +167,7 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
                     loaded = true,
                     totalPhotos = photos.size,
                     locatedPhotos = photos.count { p -> p.hasLocation },
+                    totalVideos = photos.count { p -> p.isVideo },
                     geocoderMissing = !namer.isAvailable,
                     diagnostics = diagnostics(),
                 )

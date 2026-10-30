@@ -178,7 +178,7 @@ private fun App(vm: GalleryViewModel = viewModel()) {
         val before = access
         access = context.photoAccess()
         // '사진 더 선택'처럼 권한 상태는 그대로인데 볼 수 있는 사진이 바뀐 경우도 다시 스캔한다.
-        if (access != PhotoAccess.NONE && access == before) vm.scan()
+        if (access != PhotoAccess.NONE && access == before) vm.rescan()
     }
 
     // 설정에서 권한을 바꾸고 돌아오거나, 카메라로 찍고 돌아오면 자동으로 새 사진을 확인한다.
@@ -191,6 +191,18 @@ private fun App(vm: GalleryViewModel = viewModel()) {
     // 처음 허용했을 때, 그리고 '선택한 사진만' ↔ '모두 허용'이 바뀌었을 때 다시 스캔한다.
     LaunchedEffect(access) {
         if (access != PhotoAccess.NONE) vm.scan()
+    }
+
+    // 동영상 권한은 사진 권한과 따로라서, 사진만 허용된 상태로 업데이트하면 동영상이 안 보인다.
+    // 이때 한 번 더 요청한다. (같은 '사진 및 동영상' 그룹이라 보통 창 없이 바로 허용된다)
+    var askedVideo by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(access) {
+        if (access == PhotoAccess.FULL && Build.VERSION.SDK_INT >= 33 && !askedVideo &&
+            !context.granted(Manifest.permission.READ_MEDIA_VIDEO)
+        ) {
+            askedVideo = true
+            launcher.launch(mediaPermissions())
+        }
     }
 
     if (access == PhotoAccess.NONE) {
@@ -360,7 +372,8 @@ private fun GroupListScreen(
 
             if (state.loaded) {
                 Text(
-                    "사진·동영상 ${state.totalPhotos}개 · 위치 있음 ${state.locatedPhotos}개 · ${state.groups.size}개 그룹",
+                    "사진 ${state.totalPhotos - state.totalVideos}장 · 동영상 ${state.totalVideos}개 · " +
+                        "위치 있음 ${state.locatedPhotos}개 · ${state.groups.size}개 그룹",
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 )
