@@ -179,7 +179,30 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
     private fun setAnchor(name: String, photo: Photo) {
         if (!photo.hasLocation) return
         anchorStore.set(name, photo.lat!!, photo.lng!!)
+        // 회사를 지점으로 지정하면 이전에 지정한 '시 전체' 설정은 지운다.
+        if (name == "work") anchorStore.workArea = null
         refreshGroups()
+    }
+
+    /**
+     * 주소를 입력해 집("home") 또는 회사("work")를 지정한다.
+     * onResult 에는 찾은 주소가, 못 찾으면 null 이 전달된다.
+     */
+    fun setAnchorByAddress(name: String, query: String, onResult: (String?) -> Unit) {
+        viewModelScope.launch {
+            val found = withContext(Dispatchers.IO) {
+                namer.geocodeAddress(query)?.also { (lat, lng, _) ->
+                    // 카드에 지역 이름을 보여주기 위해 주소 캐시도 채워 둔다.
+                    namer.resolve(listOf(namer.cellKey(lat, lng))) { _, _ -> }
+                }
+            }
+            if (found != null) {
+                anchorStore.set(name, found.first, found.second)
+                if (name == "work") anchorStore.workArea = null
+                refreshGroups()
+            }
+            onResult(found?.third)
+        }
     }
 
     /** 직접 지정한 집/회사를 지우고 자동 감지로 되돌린다. */
@@ -199,7 +222,7 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
                 homeText = home?.let { a -> describe(a) },
                 workText = listOfNotNull(
                     workArea?.let { a -> "$a 전체 (직접 지정)" },
-                    work?.let { a -> describe(a) },
+                    work?.let { a -> "${describe(a)} · 반경 1km" },
                 ).joinToString(", ").ifEmpty { null },
                 anchorsManual = home?.manual == true || work?.manual == true || workArea != null,
             )

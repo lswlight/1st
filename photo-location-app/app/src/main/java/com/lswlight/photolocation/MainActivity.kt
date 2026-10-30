@@ -45,7 +45,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -218,6 +220,13 @@ private fun App(vm: GalleryViewModel = viewModel()) {
             onRefresh = vm::scan,
             onLevel = vm::setLevel,
             onResetAnchors = vm::resetAnchors,
+            onSetByAddress = { name, query ->
+                vm.setAnchorByAddress(name, query) { found ->
+                    val label = if (name == "home") "집" else "회사"
+                    val msg = if (found != null) "$label 위치: $found" else "주소를 찾지 못했습니다. 시·구 이름까지 넣어 다시 입력해 주세요."
+                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                }
+            },
             onGroup = { openGroup = it.name },
         )
     }
@@ -254,6 +263,7 @@ private fun GroupListScreen(
     onRefresh: () -> Unit,
     onLevel: (GroupLevel) -> Unit,
     onResetAnchors: () -> Unit,
+    onSetByAddress: (name: String, query: String) -> Unit,
     onGroup: (PhotoGroup) -> Unit,
 ) {
     Scaffold(
@@ -317,7 +327,7 @@ private fun GroupListScreen(
                 )
             }
             if (state.loaded && state.level == GroupLevel.LIFE && state.totalPhotos > 0) {
-                AnchorCard(state, onResetAnchors)
+                AnchorCard(state, onResetAnchors, onSetByAddress)
             }
             if (state.geocoderMissing) {
                 Notice("이 기기에서 주소 변환(Geocoder)을 지원하지 않아 지역 이름을 표시할 수 없습니다.")
@@ -334,7 +344,23 @@ private fun GroupListScreen(
 }
 
 @Composable
-private fun AnchorCard(state: UiState, onReset: () -> Unit) {
+private fun AnchorCard(
+    state: UiState,
+    onReset: () -> Unit,
+    onSetByAddress: (name: String, query: String) -> Unit,
+) {
+    // 주소 입력 창을 띄운 대상: "home" / "work" / null(닫힘)
+    var addressFor by remember { mutableStateOf<String?>(null) }
+    addressFor?.let { name ->
+        AddressDialog(
+            title = if (name == "home") "집 주소 입력" else "회사 주소 입력",
+            onConfirm = { query ->
+                onSetByAddress(name, query)
+                addressFor = null
+            },
+            onDismiss = { addressFor = null },
+        )
+    }
     Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
         Column(Modifier.padding(12.dp)) {
             Text("집: ${state.homeText ?: "찾지 못함"}", style = MaterialTheme.typography.bodySmall)
@@ -346,11 +372,38 @@ private fun AnchorCard(state: UiState, onReset: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = { addressFor = "home" }) { Text("주소로 집 지정") }
+                TextButton(onClick = { addressFor = "work" }) { Text("주소로 회사 지정") }
+            }
             if (state.anchorsManual) {
                 TextButton(onClick = onReset) { Text("자동 감지로 되돌리기") }
             }
         }
     }
+}
+
+@Composable
+private fun AddressDialog(title: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+    var text by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                placeholder = { Text("예: 서울 중구 세종대로 110") },
+                singleLine = true,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(text.trim()) }, enabled = text.isNotBlank()) { Text("확인") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("취소") }
+        },
+    )
 }
 
 @Composable

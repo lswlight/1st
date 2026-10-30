@@ -51,6 +51,17 @@ class LocationNamer(context: Context) {
         if (missing.isNotEmpty()) writeCache()
     }
 
+    /** 주소 문자열 → (위도, 경도, 찾은 주소). 못 찾으면 null */
+    @Suppress("DEPRECATION")
+    fun geocodeAddress(query: String): Triple<Double, Double, String>? {
+        val address = try {
+            geocoder.getFromLocationName(query, 1)?.firstOrNull()
+        } catch (e: Exception) {
+            null
+        } ?: return null
+        return Triple(address.latitude, address.longitude, address.getAddressLine(0) ?: query)
+    }
+
     @Suppress("DEPRECATION")
     private fun lookup(key: String): Place? {
         val (latCell, lngCell) = key.split(',').map { it.toLong() }
