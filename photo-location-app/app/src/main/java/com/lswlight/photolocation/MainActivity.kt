@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -990,7 +991,9 @@ private fun GroupScreen(
                 val chosen = group.photos.filter { it.id in selected }
                 Row(
                     Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        // 휴대폰 하단 버튼(◁ ○ |||)에 가리지 않도록 그 높이만큼 위로 올린다.
+                        .navigationBarsPadding()
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                 ) {
                     TextButton(onClick = { shareItems(context, chosen) }) { Text("공유") }
