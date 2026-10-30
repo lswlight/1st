@@ -41,6 +41,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -48,6 +49,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
@@ -83,6 +85,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -120,11 +123,13 @@ private fun AppTheme(content: @Composable () -> Unit) {
 private fun mediaPermissions(): Array<String> = when {
     Build.VERSION.SDK_INT >= 34 -> arrayOf(
         Manifest.permission.READ_MEDIA_IMAGES,
+        Manifest.permission.READ_MEDIA_VIDEO,
         Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
         Manifest.permission.ACCESS_MEDIA_LOCATION,
     )
     Build.VERSION.SDK_INT >= 33 -> arrayOf(
         Manifest.permission.READ_MEDIA_IMAGES,
+        Manifest.permission.READ_MEDIA_VIDEO,
         Manifest.permission.ACCESS_MEDIA_LOCATION,
     )
     else -> arrayOf(
@@ -301,10 +306,10 @@ private fun PermissionScreen(onRequest: () -> Unit) {
     ) {
         Icon(Icons.Default.Place, contentDescription = null, modifier = Modifier.size(64.dp))
         Spacer(Modifier.height(16.dp))
-        Text("사진 위치 분류", style = MaterialTheme.typography.headlineSmall)
+        Text("앨범 박스", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(12.dp))
         Text(
-            "갤러리 사진에 기록된 촬영 위치(GPS)를 읽어 지역별로 묶어 보여줍니다.\n" +
+            "갤러리 사진·동영상의 촬영 위치(GPS)와 출처로 집, 회사, 지역, 앱별로 묶어 보여줍니다.\n" +
                 "사진 파일은 옮기거나 수정하지 않습니다.",
             style = MaterialTheme.typography.bodyMedium,
         )
@@ -329,7 +334,7 @@ private fun GroupListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("사진 위치 분류") },
+                title = { Text("앨범 박스") },
                 actions = {
                     IconButton(onClick = onExport, enabled = state.loaded && state.progress == null) {
                         Icon(Icons.Default.Share, contentDescription = "PC로 내보내기")
@@ -355,7 +360,7 @@ private fun GroupListScreen(
 
             if (state.loaded) {
                 Text(
-                    "사진 ${state.totalPhotos}장 · 위치 있음 ${state.locatedPhotos}장 · ${state.groups.size}개 그룹",
+                    "사진·동영상 ${state.totalPhotos}개 · 위치 있음 ${state.locatedPhotos}개 · ${state.groups.size}개 그룹",
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 )
@@ -678,11 +683,25 @@ private fun GroupRow(group: PhotoGroup, onClick: () -> Unit) {
 
 @Composable
 private fun Thumbnail(photo: Photo, modifier: Modifier) {
-    AsyncImage(
-        model = photo.uri,
-        contentDescription = photo.name,
-        contentScale = ContentScale.Crop,
-        modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
+    Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant)) {
+        AsyncImage(
+            model = photo.uri,
+            contentDescription = photo.name,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+        if (photo.isVideo) PlayBadge(Modifier.align(Alignment.Center).size(28.dp))
+    }
+}
+
+/** 동영상 표시: 반투명 원 위의 재생 아이콘 */
+@Composable
+private fun PlayBadge(modifier: Modifier) {
+    Icon(
+        Icons.Default.PlayArrow,
+        contentDescription = "동영상",
+        tint = Color.White,
+        modifier = modifier.background(Color.Black.copy(alpha = 0.45f), CircleShape).padding(4.dp),
     )
 }
 
@@ -859,6 +878,12 @@ private fun PhotoScreen(
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize(),
                 )
+                if (photo.isVideo) {
+                    PlayBadge(
+                        Modifier.align(Alignment.Center).size(72.dp)
+                            .clickable { openInGallery(context, photo.uri, video = true) }
+                    )
+                }
             }
             Column(Modifier.padding(16.dp)) {
                 Text(dateText, fontWeight = FontWeight.SemiBold)
@@ -875,8 +900,8 @@ private fun PhotoScreen(
                             Text("지도에서 보기")
                         }
                     }
-                    OutlinedButton(onClick = { openInGallery(context, photo.uri) }) {
-                        Text("갤러리 앱에서 열기")
+                    OutlinedButton(onClick = { openInGallery(context, photo.uri, photo.isVideo) }) {
+                        Text(if (photo.isVideo) "동영상 재생" else "갤러리 앱에서 열기")
                     }
                 }
                 if (photo.hasLocation) {
@@ -910,9 +935,9 @@ private fun openMap(context: Context, lat: Double, lng: Double, label: String) {
     startSafely(context, Intent(Intent.ACTION_VIEW, uri))
 }
 
-private fun openInGallery(context: Context, uri: Uri) {
+private fun openInGallery(context: Context, uri: Uri, video: Boolean) {
     val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(uri, "image/*")
+        setDataAndType(uri, if (video) "video/*" else "image/*")
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
     startSafely(context, intent)

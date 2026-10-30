@@ -1,6 +1,7 @@
-# 사진 위치 분류 (안드로이드 앱)
+# 앨범 박스 (안드로이드 앱)
 
-갤러리에 이미 있는 사진을 촬영 위치(EXIF GPS)와 출처로 묶어 보여주는 앱입니다.
+갤러리에 이미 있는 사진·동영상을 촬영 위치(GPS)와 출처로 묶어 보여주는 앱입니다.
+(사진은 EXIF, 동영상은 메타데이터의 위치를 읽습니다. 화면 녹화는 스크린샷 그룹으로 모읍니다.)
 앱 안에서 분류해 보여주기만 하며, 원본 파일은 'PC로 내보내기'에서 이동을 고를 때만 옮깁니다.
 
 ## 분류 구조
@@ -65,6 +66,10 @@ cd photo-location-app
 # 결과: app/build/outputs/apk/debug/app-debug.apk
 ```
 
+## 아이콘
+
+`tools/icon_source.png` 를 `python3 tools/make_icon.py` 로 적응형 아이콘(전경·배경)으로 변환합니다.
+
 ## 코드 구조
 
 | 파일 | 역할 |
@@ -75,4 +80,5 @@ cd photo-location-app
 | `PhotoSource.kt` | 저장 폴더로 받은 사진 출처 구분 |
 | `Exporter.kt` | PC 로 내보내기 (그룹/월 폴더로 복사·이동, 휴지통) |
 | `GalleryViewModel.kt` | 스캔 진행 상태, 그룹 만들기, 내보내기 진행 |
+| `AlbumBoxApp.kt` | 동영상 썸네일용 이미지 로더 설정 |
 | `MainActivity.kt` | 권한 요청, 그룹 목록 / 월 폴더 / 사진 그리드 / 사진 보기 / 내보내기 화면 (Jetpack Compose) |

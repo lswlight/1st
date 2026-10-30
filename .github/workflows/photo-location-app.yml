@@ -1,4 +1,4 @@
-name: 사진 위치 분류 앱 빌드
+name: 앨범 박스 앱 빌드
 
 on:
   push:
@@ -37,7 +37,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: photo-app-latest
-          name: 사진 위치 분류 앱 (최신)
+          name: 앨범 박스 (최신)
           target_commitish: ${{ github.sha }}
           body: |
             휴대폰에서 아래 photo-location.apk 를 눌러 받은 뒤 설치하세요.

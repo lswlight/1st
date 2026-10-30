@@ -31,7 +31,7 @@ fun receivedGroupName(relativePath: String): String? {
 
     return when {
         "kakaotalk" in lower -> KAKAO
-        "screenshot" in lower -> SCREENSHOT
+        "screenshot" in lower || "screen record" in lower || "screenrecord" in lower -> SCREENSHOT
         lower.startsWith("download") -> DOWNLOAD
         // DCIM/Camera 등 카메라 폴더
         lower.startsWith("dcim") -> null

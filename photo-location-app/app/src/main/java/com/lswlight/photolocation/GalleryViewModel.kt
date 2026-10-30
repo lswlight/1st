@@ -107,6 +107,9 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
         app.contentResolver.registerContentObserver(
             MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, observer
         )
+        app.contentResolver.registerContentObserver(
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI, true, observer
+        )
     }
 
     override fun onCleared() {
@@ -173,6 +176,7 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
             append("Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT}) · ")
             append("${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n")
             append("권한: 사진전체 ${has("android.permission.READ_MEDIA_IMAGES")}")
+            append(" / 동영상 ${has("android.permission.READ_MEDIA_VIDEO")}")
             append(" / 선택사진 ${has("android.permission.READ_MEDIA_VISUAL_USER_SELECTED")}")
             append(" / 저장소 ${has("android.permission.READ_EXTERNAL_STORAGE")}")
             append(" / 사진위치 ${has("android.permission.ACCESS_MEDIA_LOCATION")}\n")
