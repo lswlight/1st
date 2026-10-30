@@ -1,20 +1,31 @@
-# SYMBOL|한글 이름|Yahoo 이름  (scan.py universe --check 로 생성)
-BTC-KRW|비트코인|Bitcoin KRW
-ETH-KRW|이더리움|Ethereum KRW
-XRP-KRW|리플|XRP KRW
-SOL-KRW|솔라나|Solana KRW
-DOGE-KRW|도지코인|Dogecoin KRW
-ADA-KRW|에이다|Cardano KRW
-TRX-KRW|트론|TRON KRW
-AVAX-KRW|아발란체|Avalanche KRW
-LINK-KRW|체인링크|Chainlink KRW
-DOT-KRW|폴카닷|Polkadot KRW
-BCH-KRW|비트코인캐시|Bitcoin Cash KRW
-LTC-KRW|라이트코인|Litecoin KRW
-XLM-KRW|스텔라루멘|Stellar KRW
-ETC-KRW|이더리움클래식|Ethereum Classic KRW
-HBAR-KRW|헤데라|Hedera KRW
-SHIB-KRW|시바이누|Shiba Inu KRW
-UNI7083-KRW|유니스왑|Uniswap KRW
-AAVE-KRW|에이브|Aave KRW
-ATOM-KRW|코스모스|Cosmos KRW
+# SYMBOL|한글 이름|영문 이름  (업비트 원화 마켓 24시간 거래대금 상위 30개, 투자유의·스테이블코인 제외)
+XRP-KRW|엑스알피(리플)|XRP
+BTC-KRW|비트코인|Bitcoin
+ETH-KRW|이더리움|Ethereum
+AXIS-KRW|액시스로보틱스|Axis Robotics
+ENA-KRW|에테나|Ethena
+NEAR-KRW|니어프로토콜|NEAR Protocol
+QUID-KRW|스퀴드|Squid
+ONDO-KRW|온도파이낸스|Ondo Finance
+SOL-KRW|솔라나|Solana
+PEPE-KRW|페페|Pepe
+IRYS-KRW|아이리스|Irys
+WLD-KRW|월드코인|Worldcoin
+LSK-KRW|리스크|Lisk
+DOGE-KRW|도지코인|Dogecoin
+MPLX-KRW|메타플렉스|Metaplex
+BLEND-KRW|플루언트|Fluent
+KAT-KRW|카타나|Katana
+TRX-KRW|트론|TRON
+SUI-KRW|수이|Sui
+ADA-KRW|에이다|Ada
+CAP-KRW|캡|Cap
+XLM-KRW|스텔라루멘|Lumen
+LINK-KRW|체인링크|Chainlink
+GTC-KRW|깃코인|Gitcoin
+DOOD-KRW|두들즈|Doodles
+UNI-KRW|유니스왑|Uniswap
+LIT-KRW|라이터|Lighter
+HBAR-KRW|헤데라|Hedera
+ELF-KRW|엘프|aelf
+CT-KRW|콘크리트|Concrete

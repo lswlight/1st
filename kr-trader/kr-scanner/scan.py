@@ -75,12 +75,12 @@ def cmd_daily(args):
     f = krt.Fetcher(args.offline, args.pause)
     syms = pick_symbols(args, market)
     min_value = args.min_value if args.min_value is not None else (1e9 if market == "krx" else 0)
-    hits, failed, liquid, scanned = [], [], 0, 0
+    hits, failed, short, liquid, scanned = [], [], [], 0, 0
     asof = None
     for i, row in enumerate(syms):
         s = row["symbol"]
         try:
-            data = f.chart(s, "1y", "1d")
+            data = f.chart(s, "6mo" if market == "crypto" else "1y", "1d")
         except krt.KrtError as e:
             failed.append(s)
             continue
@@ -93,10 +93,10 @@ def cmd_daily(args):
             if krt.session_day(t, market) == day and not done:
                 bars = bars[:-1]
         if len(bars) < 30:
-            failed.append(s)
+            short.append(s)
             continue
         last = bars[-1]
-        value = last["c"] * last["v"] if market == "krx" else last["v"]
+        value = krt.bar_value(last, market)
         if last["c"] < args.min_price or value < min_value:
             continue
         liquid += 1
@@ -117,7 +117,7 @@ def cmd_daily(args):
             counts[st] = counts.get(st, 0) + 1
     report = {"mode": "daily", "market": market, "as_of": now.isoformat(),
               "closes_through": str(krt.session_day(asof, market)) if asof else None,
-              "universe": len(syms), "fetched": len(syms) - len(failed), "failed": failed,
+              "universe": len(syms), "fetched": len(syms) - len(failed), "failed": failed, "short": short,
               "liquid": liquid, "scanned": scanned, "counts": counts, "hits": hits}
     if args.json:
         print(krt.json.dumps(report, ensure_ascii=False, indent=2, default=str))
@@ -132,11 +132,13 @@ def cmd_daily(args):
 
 def print_daily(r, show):
     mk = krt.MARKETS[r["market"]]["name"]
-    print("%s 일봉 스캔: %s 종가까지 (Yahoo 일봉)" % (mk, r["closes_through"]))
+    print("%s 일봉 스캔: %s 종가까지 (%s 일봉)" % (mk, r["closes_through"], krt.source_label(r["market"])))
     print("목록 %d개 중 %d개 수신, 유동성 통과 %d개, 스캔 %d개." % (
         r["universe"], r["fetched"], r["liquid"], r["scanned"]))
     if r["failed"]:
         print("받지 못한 종목 %d개: %s" % (len(r["failed"]), ", ".join(r["failed"][:10])))
+    if r.get("short"):
+        print("기록이 30일 미만이라 뺀 종목 %d개 (신규 상장 등): %s" % (len(r["short"]), ", ".join(r["short"][:10])))
     if not r["hits"]:
         print("조건에 맞는 차트가 없습니다.")
         return
@@ -182,7 +184,7 @@ def cmd_orb(args):
     for i, row in enumerate(syms):
         s = row["symbol"]
         try:
-            data = f.chart(s, "5d", "5m")
+            data = f.chart(s, "1d" if market == "crypto" else "5d", "5m")
         except krt.KrtError:
             failed.append(s)
             continue
@@ -206,7 +208,7 @@ def cmd_orb(args):
         print(krt.json.dumps(report, ensure_ascii=False, indent=2, default=str))
     else:
         mk = krt.MARKETS[market]["name"]
-        print("%s 개장 %d분 범위 돌파 스캔: %s %s 기준 (5분봉, Yahoo)" % (mk, or_min, day, report["cutoff"]))
+        print("%s 개장 %d분 범위 돌파 스캔: %s %s 기준 (5분봉, %s)" % (mk, or_min, day, report["cutoff"], krt.source_label(market)))
         print("목록 %d개 중 쓸 수 있는 차트 %d개 (데이터 부족·누락 %d개)." % (len(syms), usable, len(failed)))
         print("범위 고점 위에서 5분봉 종가가 마감한 차트 %d개, 거래대금 순:" % len(hits))
         for h in hits[:args.show]:
@@ -224,8 +226,41 @@ def cmd_orb(args):
 
 # ------------------------------------------------------------------ universe
 
+def upbit_universe(args):
+    """업비트 원화 마켓 중 24시간 거래대금 상위 N개 (유의 종목 제외)."""
+    f = krt.Fetcher(None, args.pause, "upbit")
+    markets = f._get(krt.UPBIT + "/market/all?isDetails=true", "KRW", "업비트")
+    krw = {m["market"]: m for m in markets if m["market"].startswith("KRW-")}
+    # 투자유의 종목과 스테이블코인(차트 분석 의미 없음)은 뺀다.
+    warn = {k for k, m in krw.items() if (m.get("market_event") or {}).get("warning")
+            or (m.get("market_warning") or "NONE") != "NONE"}
+    stable = {"KRW-USDT", "KRW-USDC", "KRW-USDS", "KRW-USDE", "KRW-DAI", "KRW-PYUSD"}
+    keys = sorted(krw)
+    tick = []
+    for i in range(0, len(keys), 100):
+        tick += f._get(krt.UPBIT + "/ticker?markets=" + ",".join(keys[i:i + 100]), "KRW", "업비트")
+    tick.sort(key=lambda t: -t.get("acc_trade_price_24h", 0))
+    out = []
+    for t in tick:
+        if t["market"] in warn or t["market"] in stable:
+            continue
+        m = krw[t["market"]]
+        out.append("%s-KRW|%s|%s" % (t["market"][4:], m.get("korean_name", ""), m.get("english_name", "")))
+        if len(out) >= args.top:
+            break
+    dest = args.dest or os.path.join(os.path.dirname(os.path.realpath(__file__)), "universe-crypto.txt")
+    with open(dest, "w", encoding="utf-8") as fh:
+        fh.write("# SYMBOL|한글 이름|영문 이름  (업비트 원화 마켓 24시간 거래대금 상위 %d개, 투자유의·스테이블코인 제외)\n" % args.top)
+        fh.write("\n".join(out) + "\n")
+    print("업비트 원화 마켓 %d개 중 거래대금 상위 %d개 저장 (투자유의 %d개·스테이블코인 제외): %s" % (
+        len(krw), len(out), len(warn), dest))
+    return 0
+
+
 def cmd_universe(args):
     market = args.market
+    if args.check and market == "crypto" and krt.crypto_source() == "upbit" and not args.source:
+        return upbit_universe(args)
     if not args.check:
         rows = krt.load_universe(market)
         for r in rows:
@@ -302,6 +337,7 @@ def main(argv=None):
     p.add_argument("--check", action="store_true", help="후보 목록을 Yahoo로 검증해 universe 파일을 다시 만든다")
     p.add_argument("--source")
     p.add_argument("--dest")
+    p.add_argument("--top", type=int, default=30, help="코인: 업비트 거래대금 상위 N개 (기본 30)")
     p.add_argument("--pause", type=float, default=0.2)
     args = ap.parse_args(argv)
     try:

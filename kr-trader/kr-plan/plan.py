@@ -64,7 +64,7 @@ def cmd_entry(args):
     if now < open_t + timedelta(minutes=or_min):
         krt.die("%s: 아직 개장 %d분 범위가 만들어지는 중입니다 (%s 이후 다시)." % (
             sym, or_min, krt.fmt_time(open_t + timedelta(minutes=or_min))))
-    data = f.chart(sym, "5d", "5m")
+    data = f.chart(sym, "1d" if market == "crypto" else "5d", "5m")
     bars = krt.five_minute_bars(data["bars"], market, until or now)
     r = krt.orb_check(bars, market, day, now, or_min, until)
     if r["status"] in ("no_data", "gap"):
@@ -98,8 +98,8 @@ def cmd_entry(args):
         expired = until is not None
         res.update(status="expired" if expired else "waiting", level=level)
     mk = market
-    print("%s %s %s 기준, %s (5분봉, Yahoo 지연 시세)" % (
-        sym, krt.names().get(sym, ""), krt.fmt_time(until or now), SETUP_KO[args.setup]))
+    print("%s %s %s 기준, %s (5분봉, %s)" % (
+        sym, krt.names().get(sym, ""), krt.fmt_time(until or now), SETUP_KO[args.setup], krt.source_label(market)))
     if r.get("or_high") is not None:
         print("개장 %d분 범위: 고가 %s, 저가 %s" % (or_min, krt.price_str(r["or_high"], mk), krt.price_str(r["or_low"], mk)))
     if res["status"] == "triggered":

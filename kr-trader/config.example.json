@@ -1,5 +1,6 @@
 {
   "_설명": "krt/config.json 으로 복사해 고친다. 세율·수수료는 증권사와 시기마다 다르니 확인할 것.",
+  "crypto_source": "upbit",
   "budget_krw": 5000000,
   "max_loss_per_trade_krw": 50000,
   "cash_buffer_pct": 10,

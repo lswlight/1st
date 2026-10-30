@@ -30,6 +30,7 @@ MARKETS = {
 }
 
 DEFAULT_CONFIG = {
+    "crypto_source": "upbit",
     "budget_krw": 5000000,
     "max_loss_per_trade_krw": 50000,
     "cash_buffer_pct": 10,
@@ -136,26 +137,98 @@ def normalize(symbol):
 
 # ------------------------------------------------------------------ 데이터
 
-class Fetcher(object):
-    """Yahoo 차트 API. --offline 이면 저장된 파일만 읽는다."""
+UPBIT = "https://api.upbit.com/v1"
 
-    def __init__(self, offline=None, pause=0.2):
+
+def crypto_source():
+    """코인 데이터원: 업비트(기본) 또는 Yahoo. 환경 변수 KRT_CRYPTO_SOURCE 나 config 의 crypto_source."""
+    src = os.environ.get("KRT_CRYPTO_SOURCE") or (load_json("config.json", {}) or {}).get("crypto_source")
+    return (src or "upbit").lower()
+
+
+def upbit_market(symbol):
+    """BTC-KRW -> KRW-BTC."""
+    base = symbol.upper().rsplit("-", 1)[0]
+    return "KRW-" + base
+
+
+def range_days(rng):
+    return {"1d": 1, "5d": 5, "1mo": 31, "3mo": 92, "6mo": 183, "1y": 366, "2y": 731}.get(rng) or int(rng.rstrip("d"))
+
+
+class Fetcher(object):
+    """차트 데이터. 국내 주식은 Yahoo, 코인은 업비트(기본). --offline 이면 저장된 파일만 읽는다."""
+
+    def __init__(self, offline=None, pause=0.2, source=None):
         self.offline = offline
         self.pause = pause
+        self.source = source
         self._last = 0.0
+
+    def _wait(self, pause=None):
+        wait = (self.pause if pause is None else pause) - (time.time() - self._last)
+        if wait > 0:
+            time.sleep(wait)
+        self._last = time.time()
 
     def chart(self, symbol, rng, interval):
         if self.offline:
             return self._offline(symbol, interval)
+        if market_of(symbol) == "crypto" and (self.source or crypto_source()) == "upbit":
+            return self._upbit(symbol, rng, interval)
+        return self._yahoo(symbol, rng, interval)
+
+    def _get(self, url, symbol, what):
+        for attempt in range(3):
+            self._wait(0.12)
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
+                with urllib.request.urlopen(req, timeout=25) as r:
+                    return json.load(r)
+            except urllib.error.HTTPError as e:
+                if e.code == 429 and attempt < 2:
+                    time.sleep(1.0 + attempt)
+                    continue
+                if e.code in (400, 404):
+                    raise KrtError("%s: %s에 없는 종목입니다" % (symbol, what))
+                raise KrtError("%s: %s 응답 오류 %s" % (symbol, what, e.code))
+            except (urllib.error.URLError, OSError, ValueError) as e:
+                raise KrtError("%s: %s 데이터를 받지 못했습니다 (%s)" % (symbol, what, e))
+        raise KrtError("%s: %s 요청 한도 초과" % (symbol, what))
+
+    def _upbit(self, symbol, rng, interval):
+        """업비트 캔들. 한 번에 200개라 기간만큼 나눠 받는다 (5분봉 60일이면 약 87번)."""
+        mk = upbit_market(symbol)
+        if interval == "1d":
+            path, step = "days", timedelta(days=1)
+        elif interval == "5m":
+            path, step = "minutes/5", BAR
+        else:
+            raise KrtError("업비트는 5m, 1d 만 지원합니다")
+        need = int(timedelta(days=range_days(rng)) / step) + 1
+        rows, to = [], None
+        while len(rows) < need:
+            url = "%s/candles/%s?market=%s&count=200" % (UPBIT, path, mk)
+            if to:
+                url += "&to=" + to
+            page = self._get(url, symbol, "업비트")
+            if not page:
+                break
+            rows.extend(page)
+            to = page[-1]["candle_date_time_utc"] + "Z"
+            if len(page) < 200:
+                break
+        if not rows:
+            raise KrtError("%s: 업비트 캔들이 비어 있습니다" % symbol)
+        return upbit_result(rows, symbol, interval)
+
+    def _yahoo(self, symbol, rng, interval):
         q = "range=%s&interval=%s&includePrePost=false" % (rng, interval)
         last_err = None
         for host in ("query2", "query1"):
             url = "https://%s.finance.yahoo.com/v8/finance/chart/%s?%s" % (host, symbol, q)
             for attempt in range(2):
-                wait = self.pause - (time.time() - self._last)
-                if wait > 0:
-                    time.sleep(wait)
-                self._last = time.time()
+                self._wait()
                 try:
                     req = urllib.request.Request(url, headers={"User-Agent": UA})
                     with urllib.request.urlopen(req, timeout=25) as r:
@@ -178,12 +251,53 @@ class Fetcher(object):
         base = self.offline
         cands = [base] if os.path.isfile(base) else [
             os.path.join(base, "%s-%s.json%s" % (symbol, interval, ext)) for ext in (".gz", "")]
+        if not os.path.isfile(base):
+            cands = [os.path.join(base, "%s-%s.upbit.json%s" % (symbol, interval, ext)) for ext in (".gz", "")] + cands
         for path in cands:
             if os.path.isfile(path):
                 opener = gzip.open if path.endswith(".gz") else open
                 with opener(path, "rt", encoding="utf-8") as fh:
-                    return chart_result(json.load(fh), symbol)
+                    data = json.load(fh)
+                if isinstance(data, list):
+                    return upbit_result(data, symbol, interval)
+                return chart_result(data, symbol)
         raise KrtError("%s: 오프라인 파일이 없습니다 (%s)" % (symbol, base))
+
+
+def upbit_result(rows, symbol, interval):
+    """업비트 캔들 목록 -> {"meta", "bars"}. 거래가 없어 빠진 5분봉은 직전 종가로 채운다 (거래량 0)."""
+    seen, bars = set(), []
+    for r in rows:
+        t = datetime.strptime(r["candle_date_time_kst"][:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=KST)
+        if t in seen:
+            continue
+        seen.add(t)
+        bars.append({"t": t, "o": float(r["opening_price"]), "h": float(r["high_price"]),
+                     "l": float(r["low_price"]), "c": float(r["trade_price"]),
+                     "v": float(r.get("candle_acc_trade_volume") or 0),
+                     "val": float(r.get("candle_acc_trade_price") or 0)})
+    bars.sort(key=lambda b: b["t"])
+    filled = 0
+    if interval == "5m" and bars:
+        out = [bars[0]]
+        for b in bars[1:]:
+            t = out[-1]["t"] + BAR
+            while t < b["t"]:
+                pc = out[-1]["c"]
+                out.append({"t": t, "o": pc, "h": pc, "l": pc, "c": pc, "v": 0.0, "val": 0.0, "filled": True})
+                filled += 1
+                t += BAR
+            out.append(b)
+        bars = out
+    return {"meta": {"exchangeName": "UPBIT", "source": "upbit", "market": upbit_market(symbol),
+                     "filled": filled}, "bars": bars}
+
+
+def bar_value(b, market):
+    """봉의 거래대금(원). 업비트는 그대로, Yahoo 코인은 거래량이 이미 원화, 국내 주식은 종가 x 거래량."""
+    if "val" in b:
+        return b["val"]
+    return b["v"] if market == "crypto" else b["c"] * b["v"]
 
 
 EXCHANGES = {".KS": "KSC", ".KQ": "KOE"}
@@ -294,7 +408,7 @@ def orb_check(bars, market, day, now, or_minutes=15, until=None):
     hi = max(b["h"] for b in rng)
     lo = min(b["l"] for b in rng)
     res = {"status": "waiting", "or_high": hi, "or_low": lo, "last": bs[-1]["c"],
-           "value": sum(b["c"] * b["v"] for b in bs), "volume": sum(b["v"] for b in bs)}
+           "value": sum(bar_value(b, market) for b in bs), "volume": sum(b["v"] for b in bs)}
     for i, b in enumerate(bs[n_or:], start=n_or):
         if slot(b["t"], market) != i:
             res["status"] = "gap"
@@ -305,7 +419,7 @@ def orb_check(bars, market, day, now, or_minutes=15, until=None):
         if b["c"] > hi:
             res.update(status="triggered", price=b["c"], at=fmt_time(end), bar=i,
                        bar_start=fmt_time(b["t"]), pct_over=round((b["c"] / hi - 1) * 100, 2),
-                       value_at=sum(x["c"] * x["v"] for x in bs[:i + 1]))
+                       value_at=sum(bar_value(x, market) for x in bs[:i + 1]))
             return res
     return res
 
@@ -465,4 +579,10 @@ def die(msg, code=1):
     sys.exit(code)
 
 
-DISCLAIMER = "규칙에 맞는지 확인한 결과일 뿐, 매수·매도 추천이 아닙니다. 데이터는 무료 Yahoo 지연 시세입니다."
+def source_label(market):
+    if market == "crypto" and crypto_source() == "upbit":
+        return "업비트"
+    return "Yahoo 지연 시세"
+
+
+DISCLAIMER = "규칙에 맞는지 확인한 결과일 뿐, 매수·매도 추천이 아닙니다. 데이터는 무료 공개 시세(국내 Yahoo 지연, 코인 업비트)입니다."

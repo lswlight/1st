@@ -127,6 +127,37 @@ class TestExchangeGuard(unittest.TestCase):
         self.assertEqual(krt.market_of("005930.KS"), "krx")
 
 
+class TestUpbit(unittest.TestCase):
+    def rows(self):
+        def r(kst, o, h, l, c, v, val):
+            return {"candle_date_time_kst": kst, "opening_price": o, "high_price": h, "low_price": l,
+                    "trade_price": c, "candle_acc_trade_volume": v, "candle_acc_trade_price": val}
+        # 업비트는 최신 봉부터 준다. 09:05 봉은 거래가 없어 빠져 있다.
+        return [r("2026-10-30T09:10:00", 101, 103, 100, 102, 2.0, 204.0),
+                r("2026-10-30T09:00:00", 100, 101, 99, 100.5, 1.0, 100.5),
+                r("2026-10-30T09:00:00", 100, 101, 99, 100.5, 1.0, 100.5)]
+
+    def test_parse_sort_dedupe_fill(self):
+        res = krt.upbit_result(self.rows(), "BTC-KRW", "5m")
+        bars = res["bars"]
+        self.assertEqual([b["t"].strftime("%H:%M") for b in bars], ["09:00", "09:05", "09:10"])
+        gap = bars[1]
+        self.assertTrue(gap["filled"])
+        self.assertEqual((gap["o"], gap["h"], gap["l"], gap["c"], gap["v"]), (100.5, 100.5, 100.5, 100.5, 0.0))
+        self.assertEqual(res["meta"]["filled"], 1)
+        self.assertEqual(krt.bar_value(bars[2], "crypto"), 204.0)
+
+    def test_market_mapping(self):
+        self.assertEqual(krt.upbit_market("BTC-KRW"), "KRW-BTC")
+        self.assertEqual(krt.range_days("60d"), 60)
+        self.assertEqual(krt.range_days("6mo"), 183)
+
+    def test_bar_value_by_source(self):
+        self.assertEqual(krt.bar_value({"c": 100, "v": 3}, "krx"), 300)
+        self.assertEqual(krt.bar_value({"c": 100, "v": 3}, "crypto"), 3)   # Yahoo 코인 거래량은 이미 원화
+        self.assertEqual(krt.bar_value({"c": 100, "v": 3, "val": 290}, "crypto"), 290)
+
+
 class TestUniverse(unittest.TestCase):
     def test_files(self):
         krx = krt.load_universe("krx")
@@ -138,6 +169,7 @@ class TestUniverse(unittest.TestCase):
         self.assertEqual(len(syms), len(krx))
         coins = krt.load_universe("crypto")
         self.assertTrue(all(r["symbol"].endswith("-KRW") for r in coins))
+        self.assertNotIn("USDT-KRW", {r["symbol"] for r in coins})
 
 
 class TestSessions(unittest.TestCase):
