@@ -199,6 +199,11 @@ private fun App(vm: GalleryViewModel = viewModel()) {
                     vm.setWork(photo)
                     Toast.makeText(context, "이 위치를 회사로 설정했습니다.", Toast.LENGTH_SHORT).show()
                 },
+                areaName = vm.areaOf(photo),
+                onSetWorkArea = {
+                    vm.setWorkArea(photo)
+                    Toast.makeText(context, "${vm.areaOf(photo)} 전체를 회사로 설정했습니다.", Toast.LENGTH_SHORT).show()
+                },
             )
         }
         group != null -> {
@@ -336,7 +341,8 @@ private fun AnchorCard(state: UiState, onReset: () -> Unit) {
             Text("회사: ${state.workText ?: "찾지 못함"}", style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(4.dp))
             Text(
-                "틀렸다면 그 장소에서 찍은 사진을 열고 '집으로 설정' / '회사로 설정'을 누르세요.",
+                "틀렸다면 그 장소에서 찍은 사진을 열고 '집으로 설정' / '회사로 설정'을 누르세요. " +
+                    "공장·산업단지처럼 넓은 곳은 '○○시 전체를 회사로 설정'이 편합니다.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -464,6 +470,8 @@ private fun PhotoScreen(
     onBack: () -> Unit,
     onSetHome: () -> Unit,
     onSetWork: () -> Unit,
+    areaName: String?,
+    onSetWorkArea: () -> Unit,
 ) {
     val context = LocalContext.current
     val dateText = remember(photo.dateTaken) {
@@ -513,6 +521,11 @@ private fun PhotoScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = onSetHome) { Text("🏠 집으로 설정") }
                         TextButton(onClick = onSetWork) { Text("🏢 회사로 설정") }
+                    }
+                    if (areaName != null) {
+                        TextButton(onClick = onSetWorkArea) {
+                            Text("🏢 ${areaName.substringAfterLast(' ')} 전체를 회사로 설정")
+                        }
                     }
                 }
             }

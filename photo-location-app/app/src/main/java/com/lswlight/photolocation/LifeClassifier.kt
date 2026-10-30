@@ -24,6 +24,11 @@ class AnchorStore(context: Context) {
         prefs.edit().putString("${name}_lat", lat.toString()).putString("${name}_lng", lng.toString()).apply()
     }
 
+    /** 회사로 볼 시·군·구 이름 (예: 경상북도 구미시). 공장·산업단지처럼 넓은 사업장용 */
+    var workArea: String?
+        get() = prefs.getString("work_area", null)
+        set(value) = prefs.edit().putString("work_area", value).apply()
+
     fun clear() {
         prefs.edit().clear().apply()
     }
@@ -33,13 +38,15 @@ class AnchorStore(context: Context) {
  * 사진을 집 / 회사 / 동네 / 외출(여행) 로 나눈다.
  *
  * - 집: 밤(21시~7시)에 찍은 날이 가장 많은 장소 (약 200m 구역)
- * - 회사: 평일 낮(9시~18시)에 찍은 날이 가장 많은 장소 (집 근처 제외)
+ * - 회사: 평일 낮(9시~18시)에 찍은 날이 가장 많은 장소 (집 근처 제외, 반경 1km)
+ *         또는 사용자가 지정한 시·군·구 전체 (예: 구미시)
  * - 동네: 집에서 5km, 회사에서 2km 이내
  * - 그 밖은 외출로 보고, 36시간 넘게 끊기지 않고 이어진 사진들을 한 번의 여행으로 묶는다.
  */
 object LifeClassifier {
     private const val HOME_RADIUS_M = 300f
-    private const val WORK_RADIUS_M = 300f
+    // 공장·연구소처럼 부지가 넓은 사업장을 고려해 집보다 넓게 잡는다.
+    private const val WORK_RADIUS_M = 1_000f
     private const val NEIGHBORHOOD_FROM_HOME_M = 5_000f
     private const val NEIGHBORHOOD_FROM_WORK_M = 2_000f
     private const val WORK_MIN_DISTANCE_FROM_HOME_M = 500f
@@ -63,11 +70,19 @@ object LifeClassifier {
         }
     }
 
-    fun kindOf(photo: Photo, home: Anchor?, work: Anchor?): LifeKind {
+    /** workArea 가 있으면 그 시·군·구(areaOf 결과)에서 찍은 사진은 모두 회사로 본다. */
+    fun kindOf(
+        photo: Photo,
+        home: Anchor?,
+        work: Anchor?,
+        workArea: String?,
+        areaOf: (Photo) -> String?,
+    ): LifeKind {
         val toHome = home?.let { distance(photo, it) }
         val toWork = work?.let { distance(photo, it) }
         return when {
             toHome != null && toHome <= HOME_RADIUS_M -> LifeKind.HOME
+            workArea != null && areaOf(photo) == workArea -> LifeKind.WORK
             toWork != null && toWork <= WORK_RADIUS_M -> LifeKind.WORK
             toHome != null && toHome <= NEIGHBORHOOD_FROM_HOME_M -> LifeKind.NEIGHBORHOOD
             toWork != null && toWork <= NEIGHBORHOOD_FROM_WORK_M -> LifeKind.NEIGHBORHOOD

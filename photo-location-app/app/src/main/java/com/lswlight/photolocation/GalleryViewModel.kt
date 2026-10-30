@@ -166,6 +166,16 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
     fun setHome(photo: Photo) = setAnchor("home", photo)
     fun setWork(photo: Photo) = setAnchor("work", photo)
 
+    /** 이 사진이 찍힌 시·군·구 전체를 회사로 지정한다. */
+    fun setWorkArea(photo: Photo) {
+        anchorStore.workArea = areaOf(photo) ?: return
+        refreshGroups()
+    }
+
+    /** 사진이 찍힌 시·군·구 이름 (주소를 아직 못 찾았으면 null) */
+    fun areaOf(photo: Photo): String? =
+        if (photo.hasLocation) namer.cached(namer.cellKey(photo.lat!!, photo.lng!!))?.district else null
+
     private fun setAnchor(name: String, photo: Photo) {
         if (!photo.hasLocation) return
         anchorStore.set(name, photo.lat!!, photo.lng!!)
@@ -180,13 +190,18 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun refreshGroups() {
         home = anchorStore.get("home") ?: LifeClassifier.detectHome(photos)
-        work = anchorStore.get("work") ?: LifeClassifier.detectWork(photos, home)
+        val workArea = anchorStore.workArea
+        // 회사 지역을 직접 지정했으면 자동 감지한 회사 지점은 쓰지 않는다.
+        work = anchorStore.get("work") ?: if (workArea == null) LifeClassifier.detectWork(photos, home) else null
         _state.update {
             it.copy(
                 groups = buildGroups(it.level),
                 homeText = home?.let { a -> describe(a) },
-                workText = work?.let { a -> describe(a) },
-                anchorsManual = home?.manual == true || work?.manual == true,
+                workText = listOfNotNull(
+                    workArea?.let { a -> "$a 전체 (직접 지정)" },
+                    work?.let { a -> describe(a) },
+                ).joinToString(", ").ifEmpty { null },
+                anchorsManual = home?.manual == true || work?.manual == true || workArea != null,
             )
         }
     }
@@ -218,7 +233,7 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun buildLifeGroups(): List<PhotoGroup> {
         val byKind = photos.filter { it.hasLocation }
-            .groupBy { LifeClassifier.kindOf(it, home, work) }
+            .groupBy { LifeClassifier.kindOf(it, home, work, anchorStore.workArea, ::areaOf) }
 
         val trips = mutableListOf<PhotoGroup>()
         val outings = mutableListOf<Photo>()
