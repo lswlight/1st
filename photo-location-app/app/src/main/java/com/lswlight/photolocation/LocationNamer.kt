@@ -10,17 +10,18 @@ import kotlin.math.floor
 data class Place(val country: String, val province: String, val district: String)
 
 /**
- * 지역 그룹 이름.
- * - 특별시·광역시·특별자치시는 도시 이름만: 대구광역시 → 대구, 서울특별시 → 서울
- * - 도는 시·군까지: 경상북도 포항시
- * - 해외는 나라 + 주/도: 일본 도쿄도
+ * 지역 그룹 이름과 하위 폴더 이름.
+ * - 특별시·광역시·특별자치시는 하위 없이 도시 이름만: 대구광역시 → (대구, null)
+ * - 도는 시·군을 하위 폴더로: 경상북도 포항시 → (경상북도, 포항시)
+ * - 해외는 나라 아래 주/도: (일본, 도쿄도)
  */
-fun Place.regionName(): String {
+fun Place.regionPath(): Pair<String, String?> {
     if (country != "대한민국" && country != "South Korea") {
-        return if (province != country) "$country $province" else country
+        return country to province.takeIf { it != country }
     }
     val metro = Regex("(특별자치시|특별시|광역시)$")
-    return if (metro.containsMatchIn(province)) province.replace(metro, "") else district
+    if (metro.containsMatchIn(province)) return province.replace(metro, "") to null
+    return province to district.removePrefix(province).trim().ifEmpty { null }
 }
 
 /**

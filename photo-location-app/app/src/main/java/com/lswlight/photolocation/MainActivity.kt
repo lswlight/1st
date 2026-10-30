@@ -163,6 +163,7 @@ private fun App(vm: GalleryViewModel = viewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     var access by remember { mutableStateOf(context.photoAccess()) }
     var openGroup by rememberSaveable { mutableStateOf<String?>(null) }
+    var openSub by rememberSaveable { mutableStateOf<String?>(null) }
     var openMonth by rememberSaveable { mutableStateOf<String?>(null) }
     var openPhotoId by rememberSaveable { mutableStateOf<Long?>(null) }
 
@@ -215,10 +216,24 @@ private fun App(vm: GalleryViewModel = viewModel()) {
         return
     }
 
-    // 그룹 → 월 폴더 → 사진 순으로 들어간다.
+    // 그룹 → (하위 지역) → 월 폴더 → 사진 순으로 들어간다.
     val group = state.groups.firstOrNull { it.name == openGroup }
-    val month = group?.months?.firstOrNull { it.first == openMonth }
+    val sub = group?.subgroups?.firstOrNull { it.name == openSub }
+    // 월 목록을 보여줄 대상: 하위 지역이 있는 그룹이면 고른 하위 지역, 아니면 그룹 자체
+    val monthOwner = when {
+        group == null -> null
+        group.subgroups.isEmpty() -> group
+        else -> sub?.let { it.copy(name = "${group.name} › ${it.name}") }
+    }
+    val month = monthOwner?.months?.firstOrNull { it.first == openMonth }
     val photo = month?.second?.firstOrNull { it.id == openPhotoId }
+    val closeMonthList = {
+        if (sub != null) {
+            openSub = null
+        } else {
+            openGroup = null
+        }
+    }
 
     when {
         photo != null -> {
@@ -244,14 +259,18 @@ private fun App(vm: GalleryViewModel = viewModel()) {
         month != null -> {
             BackHandler { openMonth = null }
             GroupScreen(
-                group.copy(name = "${group.name} · ${month.first}", photos = month.second),
+                monthOwner!!.copy(name = "${monthOwner.name} · ${month.first}", photos = month.second),
                 onBack = { openMonth = null },
                 onPhoto = { openPhotoId = it.id },
             )
         }
+        monthOwner != null -> {
+            BackHandler { closeMonthList() }
+            MonthListScreen(monthOwner, onBack = { closeMonthList() }, onMonth = { openMonth = it })
+        }
         group != null -> {
             BackHandler { openGroup = null }
-            MonthListScreen(group, onBack = { openGroup = null }, onMonth = { openMonth = it })
+            SubgroupListScreen(group, onBack = { openGroup = null }, onSub = { openSub = it.name })
         }
         else -> GroupListScreen(
             state = state,
@@ -647,7 +666,9 @@ private fun GroupRow(group: PhotoGroup, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "${group.photos.size}장 · ${dateRange(group.photos)}",
+                "${group.photos.size}장" +
+                    (if (group.subgroups.isNotEmpty()) " · ${group.subgroups.size}곳" else "") +
+                    " · ${dateRange(group.photos)}",
                 style = MaterialTheme.typography.bodySmall,
             )
         }
@@ -663,6 +684,39 @@ private fun Thumbnail(photo: Photo, modifier: Modifier) {
         contentScale = ContentScale.Crop,
         modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
     )
+}
+
+/** 도 아래 시·군 목록 (경상북도 › 포항시, 김천시 …) */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SubgroupListScreen(group: PhotoGroup, onBack: () -> Unit, onSub: (PhotoGroup) -> Unit) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text(group.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            "${group.photos.size}장 · ${group.subgroups.size}곳",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            items(group.subgroups, key = { it.name }) { sub ->
+                GroupRow(sub, onClick = { onSub(sub) })
+                HorizontalDivider()
+            }
+        }
+    }
 }
 
 /** 그룹 안의 월별 폴더 목록 */

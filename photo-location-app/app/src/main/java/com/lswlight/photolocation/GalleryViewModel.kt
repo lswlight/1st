@@ -25,6 +25,8 @@ data class PhotoGroup(
     /** 지도 열기용 대표 좌표 (위치 없는 그룹은 null) */
     val centerLat: Double?,
     val centerLng: Double?,
+    /** 하위 지역 (경상북도 아래 포항시, 김천시 …). 비어 있으면 바로 월 폴더로 들어간다. */
+    val subgroups: List<PhotoGroup> = emptyList(),
 ) {
     /** 월별 하위 폴더: (2026년 10월, 사진들) 최신 달부터 */
     val months: List<Pair<String, List<Photo>>> by lazy {
@@ -257,14 +259,24 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
     private fun buildGroups(): List<PhotoGroup> {
         val workArea = anchorStore.workArea
         val byName = LinkedHashMap<String, MutableList<Photo>>()
+        // 지역 그룹별 하위 지역(시·군) 사진. 광역시처럼 하위가 없으면 키가 null
+        val subsByRegion = HashMap<String, LinkedHashMap<String?, MutableList<Photo>>>()
         for (photo in cameraPhotos) {
             val name = when {
                 !photo.hasLocation -> NO_LOCATION
                 else -> when (LifeClassifier.kindOf(photo, home, work, workArea, ::areaOf)) {
                     LifeKind.HOME -> HOME
                     LifeKind.WORK -> WORK
-                    LifeKind.OTHER ->
-                        namer.cached(namer.cellKey(photo.lat!!, photo.lng!!))?.regionName() ?: UNRESOLVED
+                    LifeKind.OTHER -> {
+                        val place = namer.cached(namer.cellKey(photo.lat!!, photo.lng!!))
+                        if (place == null) {
+                            UNRESOLVED
+                        } else {
+                            val (region, sub) = place.regionPath()
+                            subsByRegion.getOrPut(region) { LinkedHashMap() }.getOrPut(sub) { mutableListOf() } += photo
+                            region
+                        }
+                    }
                 }
             }
             byName.getOrPut(name) { mutableListOf() } += photo
@@ -272,10 +284,17 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
         val fixedTop = listOf(HOME, WORK)
         val fixedBottom = listOf(NO_LOCATION, UNRESOLVED)
         val regions = byName.filterKeys { it !in fixedTop && it !in fixedBottom }
-            .map { (name, list) -> toGroup(name, list) }
+            .map { (name, list) -> toGroup(name, list, subgroups(subsByRegion[name])) }
             .sortedByDescending { it.photos.size }
         fun fixed(names: List<String>) = names.mapNotNull { n -> byName[n]?.let { toGroup(n, it) } }
         return fixed(fixedTop) + regions + fixed(fixedBottom) + receivedGroups()
+    }
+
+    /** 시·군 하위 그룹. 하위 이름이 하나도 없으면(광역시) 빈 목록 */
+    private fun subgroups(subs: Map<String?, List<Photo>>?): List<PhotoGroup> {
+        if (subs == null || subs.keys.all { it == null }) return emptyList()
+        return subs.map { (sub, list) -> toGroup(sub ?: "시·군 미확인", list) }
+            .sortedByDescending { it.photos.size }
     }
 
     /** 카카오톡·스크린샷 등 받은 사진은 위치와 상관없이 출처(앱)별로 묶는다. */
@@ -288,11 +307,12 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
         return known + others
     }
 
-    private fun toGroup(name: String, list: List<Photo>): PhotoGroup {
+    private fun toGroup(name: String, list: List<Photo>, subgroups: List<PhotoGroup> = emptyList()): PhotoGroup {
         val located = list.filter { it.hasLocation }
         return PhotoGroup(
             name = name,
             photos = list,
+            subgroups = subgroups,
             centerLat = located.takeIf { it.isNotEmpty() }?.map { it.lat!! }?.average(),
             centerLng = located.takeIf { it.isNotEmpty() }?.map { it.lng!! }?.average(),
         )
@@ -311,18 +331,15 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
             var done = 0
             withContext(Dispatchers.IO) {
                 val existing = HashMap<String, Set<String>>()
-                for (group in groups) {
-                    for (photo in group.photos) {
-                        val folder = exportFolder(group, photo)
-                        val names = existing.getOrPut(folder) { exporter.existingNames(folder) }
-                        when {
-                            photo.name in names -> skipped++
-                            exporter.copy(photo, folder) -> copied++
-                            else -> failed++
-                        }
-                        done++
-                        if (done % 10 == 0) setExportProgress("복사 중", done, total)
+                for ((photo, folder) in groups.flatMap { exportTargets(it) }) {
+                    val names = existing.getOrPut(folder) { exporter.existingNames(folder) }
+                    when {
+                        photo.name in names -> skipped++
+                        exporter.copy(photo, folder) -> copied++
+                        else -> failed++
                     }
+                    done++
+                    if (done % 10 == 0) setExportProgress("복사 중", done, total)
                 }
             }
             finishExport(
@@ -340,7 +357,7 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
             _state.update { it.copy(exportMessage = "사진 이동은 Android 11 이상에서만 됩니다. '복사'를 이용해 주세요.") }
             return
         }
-        val items = groups.flatMap { g -> g.photos.map { it to exportFolder(g, it) } }
+        val items = groups.flatMap { exportTargets(it) }
         moveQueue.clear()
         moveQueue.addAll(items.chunked(REQUEST_CHUNK))
         exportDone = 0

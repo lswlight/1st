@@ -15,13 +15,22 @@ private val MONTH_FORMAT = java.text.SimpleDateFormat("yyyy년 MM월", java.util
 /** 월 폴더 이름. 두 자리 월이라 PC 에서도 순서대로 정렬된다. 예: 2026년 03월 */
 fun monthLabel(time: Long): String = MONTH_FORMAT.format(java.util.Date(time))
 
-/** 사진을 넣을 폴더: '그룹/2026년 10월/' */
-fun exportFolder(group: PhotoGroup, photo: Photo): String = exportFolder(group.name) + monthLabel(photo.dateTaken) + "/"
+/** 윈도우에서도 쓸 수 있는 폴더 이름으로 바꾼다. */
+private fun safeName(name: String): String =
+    name.replace(Regex("""[\\/:*?"<>|]"""), "_").trim().trimEnd('.')
 
-/** 그룹 이름을 윈도우에서도 쓸 수 있는 폴더 이름으로 바꾼다. */
-fun exportFolder(groupName: String): String {
-    val safe = groupName.replace(Regex("""[\\/:*?"<>|]"""), "_").trim().trimEnd('.')
-    return "$EXPORT_ROOT$safe/"
+/**
+ * 그룹의 사진마다 넣을 폴더.
+ * 하위 지역이 있으면 '경상북도/포항시/2026년 10월/', 없으면 '대구/2026년 10월/'
+ */
+fun exportTargets(group: PhotoGroup): List<Pair<Photo, String>> {
+    val base = EXPORT_ROOT + safeName(group.name) + "/"
+    if (group.subgroups.isEmpty()) {
+        return group.photos.map { it to base + monthLabel(it.dateTaken) + "/" }
+    }
+    return group.subgroups.flatMap { sub ->
+        sub.photos.map { it to base + safeName(sub.name) + "/" + monthLabel(it.dateTaken) + "/" }
+    }
 }
 
 /**
