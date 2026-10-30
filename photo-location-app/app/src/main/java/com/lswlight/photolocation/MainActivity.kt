@@ -163,6 +163,7 @@ private fun App(vm: GalleryViewModel = viewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     var access by remember { mutableStateOf(context.photoAccess()) }
     var openGroup by rememberSaveable { mutableStateOf<String?>(null) }
+    var openMonth by rememberSaveable { mutableStateOf<String?>(null) }
     var openPhotoId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     val launcher = rememberLauncherForActivityResult(
@@ -214,8 +215,10 @@ private fun App(vm: GalleryViewModel = viewModel()) {
         return
     }
 
+    // 그룹 → 월 폴더 → 사진 순으로 들어간다.
     val group = state.groups.firstOrNull { it.name == openGroup }
-    val photo = group?.photos?.firstOrNull { it.id == openPhotoId }
+    val month = group?.months?.firstOrNull { it.first == openMonth }
+    val photo = month?.second?.firstOrNull { it.id == openPhotoId }
 
     when {
         photo != null -> {
@@ -238,9 +241,17 @@ private fun App(vm: GalleryViewModel = viewModel()) {
                 },
             )
         }
+        month != null -> {
+            BackHandler { openMonth = null }
+            GroupScreen(
+                group.copy(name = "${group.name} · ${month.first}", photos = month.second),
+                onBack = { openMonth = null },
+                onPhoto = { openPhotoId = it.id },
+            )
+        }
         group != null -> {
             BackHandler { openGroup = null }
-            GroupScreen(group, onBack = { openGroup = null }, onPhoto = { openPhotoId = it.id })
+            MonthListScreen(group, onBack = { openGroup = null }, onMonth = { openMonth = it })
         }
         else -> GroupListScreen(
             state = state,
@@ -249,7 +260,6 @@ private fun App(vm: GalleryViewModel = viewModel()) {
             locationPermission = context.granted(Manifest.permission.ACCESS_MEDIA_LOCATION),
             onRefresh = vm::scan,
             onExport = { exporting = true },
-            onLevel = vm::setLevel,
             onResetAnchors = vm::resetAnchors,
             onSetByAddress = { name, query ->
                 vm.setAnchorByAddress(name, query) { found ->
@@ -293,7 +303,6 @@ private fun GroupListScreen(
     locationPermission: Boolean,
     onRefresh: () -> Unit,
     onExport: () -> Unit,
-    onLevel: (GroupLevel) -> Unit,
     onResetAnchors: () -> Unit,
     onSetByAddress: (name: String, query: String) -> Unit,
     onGroup: (PhotoGroup) -> Unit,
@@ -314,19 +323,6 @@ private fun GroupListScreen(
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                GroupLevel.entries.forEach { level ->
-                    FilterChip(
-                        selected = state.level == level,
-                        onClick = { onLevel(level) },
-                        label = { Text(level.label) },
-                    )
-                }
-            }
-
             state.progress?.let { p ->
                 Column(Modifier.padding(16.dp)) {
                     Text("${p.message}… ${p.done} / ${p.total}", style = MaterialTheme.typography.bodySmall)
@@ -361,7 +357,7 @@ private fun GroupListScreen(
                     onPickMore = null,
                 )
             }
-            if (state.loaded && state.level == GroupLevel.LIFE && state.totalPhotos > 0) {
+            if (state.loaded && state.totalPhotos > 0) {
                 AnchorCard(state, onResetAnchors, onSetByAddress)
             }
             if (state.geocoderMissing) {
@@ -487,7 +483,7 @@ private fun ExportScreen(
 ) {
     var move by rememberSaveable { mutableStateOf(false) }
     // 위치 없는 사진은 기본으로 빼 둔다.
-    var selected by remember(state.level) {
+    var selected by remember {
         mutableStateOf(state.groups.map { it.name }.filter { it != NO_LOCATION && it != UNRESOLVED }.toSet())
     }
     var confirm by remember { mutableStateOf<String?>(null) }
@@ -546,7 +542,7 @@ private fun ExportScreen(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Spacer(Modifier.height(4.dp))
-                    Text("현재 분류 기준: ${state.level.label}", style = MaterialTheme.typography.bodySmall)
+                    Text("폴더 구조: 사진위치분류 › 그룹 › 2026년 10월 › 사진", style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(12.dp))
                     ModeRow(!move, "복사", "원본은 그대로 두고 복사본을 만듭니다. 그만큼 저장 공간을 더 씁니다.") { move = false }
                     ModeRow(move, "이동", "원본 파일을 그룹 폴더로 옮깁니다. 저장 공간을 더 쓰지 않습니다.") { move = true }
@@ -667,6 +663,59 @@ private fun Thumbnail(photo: Photo, modifier: Modifier) {
         contentScale = ContentScale.Crop,
         modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
     )
+}
+
+/** 그룹 안의 월별 폴더 목록 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MonthListScreen(group: PhotoGroup, onBack: () -> Unit, onMonth: (String) -> Unit) {
+    val context = LocalContext.current
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text(group.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            "${group.photos.size}장 · ${group.months.size}개월",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
+                    }
+                },
+                actions = {
+                    if (group.centerLat != null && group.centerLng != null) {
+                        IconButton(onClick = { openMap(context, group.centerLat, group.centerLng, group.name) }) {
+                            Icon(Icons.Default.Place, contentDescription = "지도에서 보기")
+                        }
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            items(group.months, key = { it.first }) { (label, photos) ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { onMonth(label) }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Thumbnail(photos.first(), Modifier.size(56.dp).clip(RoundedCornerShape(8.dp)))
+                    Spacer(Modifier.width(16.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("📁 $label", style = MaterialTheme.typography.titleMedium)
+                        Text("${photos.size}장", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Icon(Icons.Default.KeyboardArrowRight, contentDescription = null)
+                }
+                HorizontalDivider()
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

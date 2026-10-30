@@ -8,7 +8,7 @@ import kotlin.math.floor
 /** 집 또는 회사 위치. manual 은 사용자가 직접 지정했는지 여부. */
 data class Anchor(val lat: Double, val lng: Double, val manual: Boolean)
 
-enum class LifeKind { HOME, WORK, NEIGHBORHOOD, AWAY }
+enum class LifeKind { HOME, WORK, OTHER }
 
 /** 사용자가 직접 지정한 집/회사 위치를 저장한다. */
 class AnchorStore(context: Context) {
@@ -35,22 +35,16 @@ class AnchorStore(context: Context) {
 }
 
 /**
- * 사진을 집 / 회사 / 동네 / 외출(여행) 로 나눈다.
+ * 카메라로 찍은 사진 중 집과 회사에서 찍은 사진을 가려낸다. 나머지는 지역 이름으로 묶는다.
  *
- * - 집: 밤(21시~7시)에 찍은 날이 가장 많은 장소 (약 200m 구역)
- * - 회사: 평일 낮(9시~18시)에 찍은 날이 가장 많은 장소 (집 근처 제외, 반경 1km)
- *         또는 사용자가 지정한 시·군·구 전체 (예: 구미시)
- * - 동네: 집에서 5km, 회사에서 2km 이내
- * - 그 밖은 외출로 보고, 36시간 넘게 끊기지 않고 이어진 사진들을 한 번의 여행으로 묶는다.
+ * - 집: 밤(21시~7시)에 찍은 날이 가장 많은 장소에서 반경 300m (또는 직접 지정)
+ * - 회사: 평일 낮(9시~18시)에 찍은 날이 가장 많은 장소에서 반경 1km (또는 주소·시 전체로 직접 지정)
  */
 object LifeClassifier {
     private const val HOME_RADIUS_M = 300f
     // 공장·연구소처럼 부지가 넓은 사업장을 고려해 집보다 넓게 잡는다.
     private const val WORK_RADIUS_M = 1_000f
-    private const val NEIGHBORHOOD_FROM_HOME_M = 5_000f
-    private const val NEIGHBORHOOD_FROM_WORK_M = 2_000f
     private const val WORK_MIN_DISTANCE_FROM_HOME_M = 500f
-    private const val TRIP_GAP_MS = 36L * 60 * 60 * 1000
     /** 자동 감지에 필요한 최소 일수. 이보다 적으면 우연히 들른 곳일 수 있다. */
     private const val MIN_DAYS = 3
 
@@ -84,33 +78,8 @@ object LifeClassifier {
             toHome != null && toHome <= HOME_RADIUS_M -> LifeKind.HOME
             workArea != null && areaOf(photo) == workArea -> LifeKind.WORK
             toWork != null && toWork <= WORK_RADIUS_M -> LifeKind.WORK
-            toHome != null && toHome <= NEIGHBORHOOD_FROM_HOME_M -> LifeKind.NEIGHBORHOOD
-            toWork != null && toWork <= NEIGHBORHOOD_FROM_WORK_M -> LifeKind.NEIGHBORHOOD
-            else -> LifeKind.AWAY
+            else -> LifeKind.OTHER
         }
-    }
-
-    /** 외출 사진을 시간순으로 이어 붙여 여행 단위로 나눈다. 각 여행은 최신 사진이 앞에 온다. */
-    fun splitTrips(away: List<Photo>): List<List<Photo>> {
-        val trips = mutableListOf<MutableList<Photo>>()
-        for (photo in away.sortedBy { it.dateTaken }) {
-            val last = trips.lastOrNull()?.last()
-            if (last == null || photo.dateTaken - last.dateTaken > TRIP_GAP_MS) {
-                trips += mutableListOf(photo)
-            } else {
-                trips.last() += photo
-            }
-        }
-        return trips.map { it.reversed() }
-    }
-
-    /** 사진들이 걸쳐 있는 날짜 수 */
-    fun dayCount(photos: List<Photo>): Int {
-        val cal = Calendar.getInstance()
-        return photos.map {
-            cal.timeInMillis = it.dateTaken
-            cal.get(Calendar.YEAR) * 1000 + cal.get(Calendar.DAY_OF_YEAR)
-        }.toSet().size
     }
 
     private fun mostVisitedCell(photos: List<Photo>, match: (Calendar) -> Boolean): Anchor? {

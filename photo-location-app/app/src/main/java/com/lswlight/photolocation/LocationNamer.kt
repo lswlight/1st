@@ -9,18 +9,18 @@ import kotlin.math.floor
 /** 한 지점의 주소를 나라 / 시·도 / 시·군·구 세 단계로 나눈 것. */
 data class Place(val country: String, val province: String, val district: String)
 
-enum class GroupLevel(val label: String) {
-    /** 집 / 회사 / 동네 / 여행 (LifeClassifier) */
-    LIFE("생활권"),
-    COUNTRY("나라"),
-    PROVINCE("시·도"),
-    DISTRICT("시·군·구"),
-}
-
-fun Place.nameAt(level: GroupLevel): String = when (level) {
-    GroupLevel.COUNTRY -> country
-    GroupLevel.PROVINCE -> province
-    GroupLevel.LIFE, GroupLevel.DISTRICT -> district
+/**
+ * 지역 그룹 이름.
+ * - 특별시·광역시·특별자치시는 도시 이름만: 대구광역시 → 대구, 서울특별시 → 서울
+ * - 도는 시·군까지: 경상북도 포항시
+ * - 해외는 나라 + 주/도: 일본 도쿄도
+ */
+fun Place.regionName(): String {
+    if (country != "대한민국" && country != "South Korea") {
+        return if (province != country) "$country $province" else country
+    }
+    val metro = Regex("(특별자치시|특별시|광역시)$")
+    return if (metro.containsMatchIn(province)) province.replace(metro, "") else district
 }
 
 /**
