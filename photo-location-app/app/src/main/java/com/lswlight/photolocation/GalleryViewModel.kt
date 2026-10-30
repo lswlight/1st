@@ -40,6 +40,8 @@ data class UiState(
     val homeText: String? = null,
     val workText: String? = null,
     val anchorsManual: Boolean = false,
+    /** 사진을 못 찾았을 때 보여줄 진단 정보 */
+    val diagnostics: String = "",
 )
 
 const val NO_LOCATION = "위치 정보 없음"
@@ -134,10 +136,25 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
                     totalPhotos = photos.size,
                     locatedPhotos = photos.count { p -> p.hasLocation },
                     geocoderMissing = !namer.isAvailable,
+                    diagnostics = diagnostics(),
                 )
             }
             refreshGroups()
             if (dirty && resumed) scheduleScan()
+        }
+    }
+
+    private fun diagnostics(): String {
+        val app = getApplication<Application>()
+        fun has(p: String) = if (app.checkSelfPermission(p) == android.content.pm.PackageManager.PERMISSION_GRANTED) "O" else "X"
+        return buildString {
+            append("Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT}) · ")
+            append("${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n")
+            append("권한: 사진전체 ${has("android.permission.READ_MEDIA_IMAGES")}")
+            append(" / 선택사진 ${has("android.permission.READ_MEDIA_VISUAL_USER_SELECTED")}")
+            append(" / 저장소 ${has("android.permission.READ_EXTERNAL_STORAGE")}")
+            append(" / 사진위치 ${has("android.permission.ACCESS_MEDIA_LOCATION")}\n")
+            append("조회: ${repository.diagnostics}")
         }
     }
 

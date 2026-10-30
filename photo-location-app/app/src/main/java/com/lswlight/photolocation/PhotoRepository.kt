@@ -30,13 +30,17 @@ class PhotoRepository(private val context: Context) {
 
     private data class CachedExif(val dateModified: Long, val lat: Double?, val lng: Double?)
 
+    /** 사진을 못 찾았을 때 원인 파악용으로 화면에 보여주는 조회 기록 */
+    var diagnostics: String = ""
+        private set
+
     fun loadPhotos(onProgress: (done: Int, total: Int) -> Unit): List<Photo> {
         val cache = readCache()
         val canReadLocation = context.checkSelfPermission(
             android.Manifest.permission.ACCESS_MEDIA_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
 
-        data class Row(val id: Long, val name: String, val dateTaken: Long, val dateModified: Long)
+        data class Row(val id: Long, val volume: String, val name: String, val dateTaken: Long, val dateModified: Long)
 
         val rows = mutableListOf<Row>()
         val projection = arrayOf(
@@ -45,33 +49,58 @@ class PhotoRepository(private val context: Context) {
             MediaStore.Images.Media.DATE_TAKEN,
             MediaStore.Images.Media.DATE_MODIFIED,
         )
-        context.contentResolver.query(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            projection,
-            null,
-            null,
-            "${MediaStore.Images.Media.DATE_TAKEN} DESC",
-        )?.use { c ->
-            val idCol = c.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-            val nameCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
-            val takenCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
-            val modCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_MODIFIED)
-            while (c.moveToNext()) {
-                val dateModified = c.getLong(modCol)
-                rows += Row(
-                    id = c.getLong(idCol),
-                    name = c.getString(nameCol) ?: "",
-                    // DATE_TAKEN 이 없는 사진은 수정 시각(초 단위)으로 대신한다.
-                    dateTaken = c.getLong(takenCol).takeIf { it > 0 } ?: (dateModified * 1000),
-                    dateModified = dateModified,
+        // 내장 메모리와 SD 카드를 각각 조회한다.
+        val log = mutableListOf<String>()
+        val volumes = try {
+            MediaStore.getExternalVolumeNames(context).toList()
+        } catch (e: Exception) {
+            log += "볼륨 목록 오류: ${e.javaClass.simpleName} ${e.message}"
+            emptyList()
+        }.ifEmpty { listOf(MediaStore.VOLUME_EXTERNAL) }
+
+        for (volume in volumes) {
+            try {
+                val cursor = context.contentResolver.query(
+                    MediaStore.Images.Media.getContentUri(volume),
+                    projection,
+                    null,
+                    null,
+                    "${MediaStore.Images.Media.DATE_TAKEN} DESC",
                 )
+                if (cursor == null) {
+                    log += "$volume: 조회 결과 없음(null)"
+                    continue
+                }
+                cursor.use { c ->
+                    log += "$volume: ${c.count}개"
+                    val idCol = c.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                    val nameCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
+                    val takenCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
+                    val modCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_MODIFIED)
+                    while (c.moveToNext()) {
+                        val dateModified = c.getLong(modCol)
+                        rows += Row(
+                            id = c.getLong(idCol),
+                            volume = volume,
+                            name = c.getString(nameCol) ?: "",
+                            // DATE_TAKEN 이 없는 사진은 수정 시각(초 단위)으로 대신한다.
+                            dateTaken = c.getLong(takenCol).takeIf { it > 0 } ?: (dateModified * 1000),
+                            dateModified = dateModified,
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                log += "$volume 오류: ${e.javaClass.simpleName} ${e.message}"
             }
         }
+        // 여러 볼륨을 합쳤으므로 다시 최신순 정렬
+        rows.sortByDescending { it.dateTaken }
+        diagnostics = log.joinToString(" · ")
 
         val newCache = HashMap<Long, CachedExif>(rows.size)
         val photos = rows.mapIndexed { index, row ->
             if (index % 50 == 0) onProgress(index, rows.size)
-            val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, row.id)
+            val uri = ContentUris.withAppendedId(MediaStore.Images.Media.getContentUri(row.volume), row.id)
             val cached = cache[row.id]?.takeIf { it.dateModified == row.dateModified }
             val exif = cached ?: readExif(uri, canReadLocation).let { (lat, lng) ->
                 CachedExif(row.dateModified, lat, lng)

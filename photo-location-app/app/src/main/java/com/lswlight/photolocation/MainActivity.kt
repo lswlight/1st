@@ -305,7 +305,11 @@ private fun GroupListScreen(
                     onPickMore = onPickMore,
                 )
             } else if (state.loaded && state.totalPhotos == 0) {
-                AccessCard("사진을 찾지 못했습니다. 설정에서 사진 권한이 '모두 허용'인지 확인해 주세요.", onPickMore = null)
+                AccessCard(
+                    "사진을 찾지 못했습니다. 설정에서 사진 권한이 '모두 허용'인지 확인해 주세요.\n\n" +
+                        "[진단 정보] 이 화면을 캡처해서 보내주시면 원인을 찾는 데 도움이 됩니다.\n${state.diagnostics}",
+                    onPickMore = null,
+                )
             }
             if (state.loaded && state.level == GroupLevel.LIFE && state.totalPhotos > 0) {
                 AnchorCard(state, onResetAnchors)
