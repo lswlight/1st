@@ -8,7 +8,7 @@
 - `skills/youtube-analyzer/` — 스킬 원본. `.claude/skills/youtube-analyzer` 는 이 폴더를 가리키는 심볼릭 링크이므로 원본만 수정한다.
 - `connector/worker.js` — Cloudflare Workers MCP 커넥터 (단일 파일, 외부 의존성 없음).
 - `dist/youtube-analyzer.zip` — claude.ai 업로드용 패키지. 직접 수정하지 말고 `./build.sh` 로 다시 만든다.
-- `kr-trader/` — 국내 주식·코인 분석 스킬 4개 (`kr-scanner`, `kr-plan`, `kr-timemachine`, `kr-news`). `.claude/skills/kr-*` 는 이 폴더를 가리키는 링크다. 공통 코드는 `kr-trader/lib/krt.py`.
+- `kr-trader/` — 국내 주식·코인 분석 스킬 5개 (`kr-scanner`, `kr-plan`, `kr-timemachine`, `kr-news`, `kr-signal`). `.claude/skills/kr-*` 는 이 폴더를 가리키는 링크다. 공통 코드는 `kr-trader/lib/krt.py`.
 
 ## 작업 규칙
 

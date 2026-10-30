@@ -201,9 +201,9 @@ class Fetcher(object):
 
     def _binance(self, symbol, rng, interval):
         """바이낸스 현물 캔들. 한 번에 1,000개 (5분봉 60일이면 18번)."""
-        step = {"5m": BAR, "1d": timedelta(days=1)}.get(interval)
+        step = {"5m": BAR, "1h": timedelta(hours=1), "1d": timedelta(days=1)}.get(interval)
         if not step:
-            raise KrtError("바이낸스는 5m, 1d 만 씁니다")
+            raise KrtError("바이낸스는 5m, 1h, 1d 만 씁니다")
         end_ms = int(time.time() * 1000)
         start_ms = end_ms - int(timedelta(days=range_days(rng)).total_seconds() * 1000)
         rows, cur = [], start_ms
@@ -246,10 +246,12 @@ class Fetcher(object):
         mk = upbit_market(symbol)
         if interval == "1d":
             path, step = "days", timedelta(days=1)
+        elif interval == "1h":
+            path, step = "minutes/60", timedelta(hours=1)
         elif interval == "5m":
             path, step = "minutes/5", BAR
         else:
-            raise KrtError("업비트는 5m, 1d 만 지원합니다")
+            raise KrtError("업비트는 5m, 1h, 1d 만 지원합니다")
         need = int(timedelta(days=range_days(rng)) / step) + 1
         rows, to = [], None
         while len(rows) < need:
@@ -696,6 +698,24 @@ def source_label(market, symbol=None):
             return "바이낸스" if quote_of(symbol) == "USDT" else ("업비트" if crypto_source() != "yahoo" else "Yahoo 지연 시세")
         return {"binance": "바이낸스", "upbit": "업비트"}.get(crypto_source(), "Yahoo 지연 시세")
     return "Yahoo 지연 시세"
+
+
+INTERVALS = {"5m": BAR, "1h": timedelta(hours=1), "1d": timedelta(days=1)}
+
+
+def completed(bars, interval, now, market):
+    """진행 중인 마지막 봉을 뺀다. 국내 일봉은 15:30 이후에야 완성으로 본다."""
+    if not bars:
+        return bars
+    last = bars[-1]
+    if interval == "1d":
+        if market == "krx":
+            done = last["t"].date() < now.date() or now >= at_time(now.date(), "15:30")
+        else:
+            done = session_day(last["t"], market) < session_day(now, market)
+    else:
+        done = last["t"] + INTERVALS[interval] <= now
+    return bars if done else bars[:-1]
 
 
 DISCLAIMER = "규칙에 맞는지 확인한 결과일 뿐, 매수·매도 추천이 아닙니다. 데이터는 무료 공개 시세(국내 Yahoo 지연, 코인 바이낸스·업비트)입니다."

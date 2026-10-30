@@ -397,7 +397,7 @@ class TestTimeMachine(TempDir):
 
 class TestRepo(unittest.TestCase):
     def test_skills_have_frontmatter(self):
-        for d in ("kr-scanner", "kr-plan", "kr-timemachine", "kr-news"):
+        for d in ("kr-scanner", "kr-plan", "kr-timemachine", "kr-news", "kr-signal"):
             with open(os.path.join(ROOT, d, "SKILL.md"), encoding="utf-8") as fh:
                 head = fh.read(400)
             self.assertTrue(head.startswith("---\nname: %s\n" % d), d)
@@ -405,7 +405,8 @@ class TestRepo(unittest.TestCase):
 
     def test_stdlib_only(self):
         allowed = set(sys.stdlib_module_names) | {"krt"}
-        for rel in ("lib/krt.py", "kr-scanner/scan.py", "kr-plan/plan.py", "kr-timemachine/tm.py"):
+        for rel in ("lib/krt.py", "kr-scanner/scan.py", "kr-plan/plan.py", "kr-timemachine/tm.py",
+                    "kr-signal/points.py"):
             with open(os.path.join(ROOT, rel), encoding="utf-8") as fh:
                 for line in fh:
                     line = line.strip()
