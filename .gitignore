@@ -2,5 +2,6 @@ skills/youtube-analyzer/config/gemini_api_key.txt
 dist-private/
 __pycache__/
 # 트레이딩 스킬 작업 폴더 (개인 설정·관심 종목, 커밋하지 않음)
+crt/
 krt/
 trader/

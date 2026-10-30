@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """kr-signal: 볼린저 밴드 기반 단기(1시간봉)·중기(일봉) 매수 타점.
 
-  points.py now SOL                    단기+중기 현재 타점 (바이낸스 SOLUSDT)
+  points.py now 005930                 단기+중기 현재 타점 (삼성전자)
   points.py now 005930 --tf mid        중기만
-  points.py scan --market crypto --tf short    목록 전체에서 지금 신호가 난 종목
+  points.py scan --tf mid               목록 전체에서 지금 신호가 난 종목
   points.py backtest 005930 --tf mid   셋업별 과거 결과만
 
 신호가 나면 진입·손절·목표가와, 이 종목에서 같은 신호가 과거에 어떻게 끝났는지를 함께 낸다.
@@ -188,10 +188,8 @@ def backtest(bars, ind, market, quote, max_hold, cost_pct, max_risk_pct=100.0):
 
 
 def roundtrip_cost(symbol, market, cfg):
-    if market == "krx":
-        return (2 * cfg["krx_commission_pct"] + cfg["krx_sell_tax_pct"]) / 100
-    fee = cfg["binance_fee_pct"] if krt.quote_of(symbol) == "USDT" else cfg["crypto_fee_pct"]
-    return 2 * fee / 100
+    """왕복 비용률: 수수료 2번 + 매도 시 증권거래세."""
+    return (2 * cfg["krx_commission_pct"] + cfg["krx_sell_tax_pct"]) / 100
 
 
 def watch_items(bars, ind, i, market):
@@ -395,7 +393,7 @@ def main(argv=None):
         if name == "now":
             p.add_argument("--json", nargs="?", const="signal.json")
     p = sub.add_parser("scan")
-    p.add_argument("--market", choices=("krx", "crypto"), default="crypto")
+    p.set_defaults(market="krx")
     p.add_argument("--tf", choices=("short", "mid"), default="mid")
     p.add_argument("--symbols")
     p.add_argument("--limit", type=int)

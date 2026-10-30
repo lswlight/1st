@@ -1,0 +1,17 @@
+{
+  "_설명": "crt/config.json 으로 복사해 고친다. 수수료는 거래소 등급·할인에 따라 다르니 확인할 것.",
+  "crypto_source": "binance",
+  "budget_krw": 5000000,
+  "max_loss_per_trade_krw": 50000,
+  "cash_buffer_pct": 10,
+  "max_position_pct": 75,
+  "min_order_krw": 5000,
+  "min_reward_risk": 1.0,
+  "or_minutes": 15,
+  "bb_period": 20,
+  "bb_k": 2.0,
+  "crypto_fee_pct": 0.05,
+  "binance_fee_pct": 0.1,
+  "usdkrw": null,
+  "crypto_hold_hours": 6
+}

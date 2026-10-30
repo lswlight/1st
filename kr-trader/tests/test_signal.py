@@ -89,9 +89,10 @@ class TestTrade(unittest.TestCase):
         bars = make_bars([100.0] * 70 + [110.0])
         t = pts.make_trade(bars, 70, "squeeze_break", 105.0, None, "krx", "KRW")
         self.assertEqual((t["entry"], t["stop"], t["target"]), (110.0, 105.0, 120.0))   # 2R
-        self.assertIsNone(pts.make_trade(bars, 70, "squeeze_break", 109.9, None, "crypto", "USDT"))  # 0.09%: 너무 좁음
         t = pts.make_trade(bars, 70, "squeeze_break", 109.9, None, "krx", "KRW")
-        self.assertEqual(t["stop"], 109)         # 국내는 1원 단위로 내림 -> 0.9% 라 통과
+        self.assertEqual(t["stop"], 109)         # 1원 단위로 내림 -> 0.9% 라 통과
+        big = make_bars([100000.0] * 70 + [100100.0])
+        self.assertIsNone(pts.make_trade(big, 70, "squeeze_break", 100000.0, None, "krx", "KRW"))  # 0.1%: 너무 좁음
         self.assertIsNone(pts.make_trade(bars, 70, "squeeze_break", 90.0, None, "krx", "KRW",
                                          max_risk_pct=15))   # 18% 손절: 상한 초과
         t = pts.make_trade(bars, 70, "lower_reentry", 105.0, 115.0, "krx", "KRW")
@@ -109,40 +110,36 @@ class TestTrade(unittest.TestCase):
     def test_completed_drops_running_bar(self):
         t0 = datetime(2026, 10, 30, 12, tzinfo=krt.KST)
         bars = [{"t": t0 - timedelta(hours=1)}, {"t": t0}]
-        self.assertEqual(len(krt.completed(bars, "1h", t0 + timedelta(minutes=30), "crypto")), 1)
-        self.assertEqual(len(krt.completed(bars, "1h", t0 + timedelta(hours=1), "crypto")), 2)
-        d = [{"t": datetime(2026, 10, 30, 9, tzinfo=krt.KST)}]
-        self.assertEqual(krt.completed(d, "1d", datetime(2026, 10, 30, 20, tzinfo=krt.KST), "crypto"), [])
+        self.assertEqual(len(krt.completed(bars, "1h", t0 + timedelta(minutes=30), "krx")), 1)
+        self.assertEqual(len(krt.completed(bars, "1h", t0 + timedelta(hours=1), "krx")), 2)
         k = [{"t": datetime(2026, 10, 30, 9, tzinfo=krt.KST)}]
         self.assertEqual(krt.completed(k, "1d", datetime(2026, 10, 30, 14, tzinfo=krt.KST), "krx"), [])
         self.assertEqual(len(krt.completed(k, "1d", datetime(2026, 10, 30, 16, tzinfo=krt.KST), "krx")), 1)
 
 
 class TestOffline(unittest.TestCase):
-    def test_now_binance_both(self):
-        code, out = run(["now", "BTC", "--offline", FIX, "--now", "2026-10-30 08:30"])
-        self.assertIn("BTCUSDT", out)
-        self.assertIn("[중기 · 일봉] 마지막 완성 봉 2026-10-28", out)     # 09:00 전이라 10/29 일봉은 진행 중
-        self.assertIn("[단기 · 1시간봉] 마지막 완성 봉 10-30 07:00", out)
-        self.assertIn("스퀴즈 진행 중", out)
+    def test_now_both(self):
+        code, out = run(["now", "005930", "--offline", FIX, "--now", "2026-10-29 16:30"])
+        self.assertIn("005930.KS 삼성전자", out)
+        self.assertIn("[중기 · 일봉] 마지막 완성 봉 2026-10-29", out)       # 15:30 이후라 오늘 일봉 완성
+        self.assertIn("[단기 · 1시간봉] 마지막 완성 봉 10-29", out)
+
+    def test_daily_unfinished_before_close(self):
+        code, out = run(["now", "005930", "--tf", "mid", "--offline", FIX, "--now", "2026-10-29 14:00"])
+        self.assertIn("마지막 완성 봉 2026-10-28", out)
 
     def test_backtest_counts_consistent(self):
         f = krt.Fetcher(FIX)
-        a = pts.analyze("BTCUSDT", "short", f, krt.config(), krt.parse_kst("2026-10-30 08:30"))
+        a = pts.analyze("005930.KS", "mid", f, krt.config(), krt.parse_kst("2026-10-29 16:30"))
         for name, st in a["stats"].items():
             self.assertEqual(st["n"], st["target"] + st["stop"] + st["time"], name)
             if st["n"]:
-                self.assertAlmostEqual(st["avg_rnet"], st["avg_r"] - (st["avg_r"] - st["avg_rnet"]))
-                self.assertLess(st["avg_rnet"], st["avg_r"])       # 비용을 빼면 항상 줄어든다
-
-    def test_krx_daily(self):
-        code, out = run(["now", "005930", "--tf", "mid", "--offline", FIX, "--now", "2026-10-29 16:30"])
-        self.assertIn("005930.KS 삼성전자", out)
-        self.assertIn("마지막 완성 봉 2026-10-29", out)
+                self.assertLess(st["avg_rnet"], st["avg_r"])       # 비용(0.23%)을 빼면 줄어든다
+        self.assertAlmostEqual(a["cost"], 0.0023)
 
     def test_scan_offline(self):
-        code, out = run(["scan", "--market", "crypto", "--tf", "mid", "--symbols", "BTC", "--offline", FIX,
-                         "--now", "2026-10-30 08:30"])
+        code, out = run(["scan", "--tf", "mid", "--symbols", "005930", "--offline", FIX,
+                         "--now", "2026-10-29 16:30"])
         self.assertIn("1개 중 1개 분석", out)
 
 

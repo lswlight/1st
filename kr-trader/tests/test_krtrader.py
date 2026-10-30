@@ -32,7 +32,6 @@ plan = load("kr-plan/plan.py", "kr_plan")
 tm = load("kr-timemachine/tm.py", "kr_tm")
 
 KRX_NOW = "2026-10-29 16:30"
-BTC_NOW = "2026-10-28 20:00"
 
 
 def run(fn, argv):
@@ -122,94 +121,7 @@ class TestExchangeGuard(unittest.TestCase):
     def test_normalize(self):
         self.assertEqual(krt.normalize("005930"), "005930.KS")
         self.assertEqual(krt.normalize("247540"), "247540.KQ")
-        old = os.environ.get("KRT_CRYPTO_SOURCE")
-        try:
-            os.environ["KRT_CRYPTO_SOURCE"] = "binance"
-            self.assertEqual(krt.normalize("btc"), "BTCUSDT")
-            os.environ["KRT_CRYPTO_SOURCE"] = "upbit"
-            self.assertEqual(krt.normalize("btc"), "BTC-KRW")
-        finally:
-            if old is None:
-                os.environ.pop("KRT_CRYPTO_SOURCE", None)
-            else:
-                os.environ["KRT_CRYPTO_SOURCE"] = old
-        self.assertEqual(krt.normalize("ethusdt"), "ETHUSDT")
-        self.assertEqual(krt.market_of("BTC-KRW"), "crypto")
-        self.assertEqual(krt.market_of("BTCUSDT"), "crypto")
-        self.assertEqual(krt.quote_of("BTCUSDT"), "USDT")
-        self.assertEqual(krt.quote_of("BTC-KRW"), "KRW")
         self.assertEqual(krt.market_of("005930.KS"), "krx")
-
-
-class TestUpbit(unittest.TestCase):
-    def rows(self):
-        def r(kst, o, h, l, c, v, val):
-            return {"candle_date_time_kst": kst, "opening_price": o, "high_price": h, "low_price": l,
-                    "trade_price": c, "candle_acc_trade_volume": v, "candle_acc_trade_price": val}
-        # 업비트는 최신 봉부터 준다. 09:05 봉은 거래가 없어 빠져 있다.
-        return [r("2026-10-30T09:10:00", 101, 103, 100, 102, 2.0, 204.0),
-                r("2026-10-30T09:00:00", 100, 101, 99, 100.5, 1.0, 100.5),
-                r("2026-10-30T09:00:00", 100, 101, 99, 100.5, 1.0, 100.5)]
-
-    def test_parse_sort_dedupe_fill(self):
-        res = krt.upbit_result(self.rows(), "BTC-KRW", "5m")
-        bars = res["bars"]
-        self.assertEqual([b["t"].strftime("%H:%M") for b in bars], ["09:00", "09:05", "09:10"])
-        gap = bars[1]
-        self.assertTrue(gap["filled"])
-        self.assertEqual((gap["o"], gap["h"], gap["l"], gap["c"], gap["v"]), (100.5, 100.5, 100.5, 100.5, 0.0))
-        self.assertEqual(res["meta"]["filled"], 1)
-        self.assertEqual(krt.bar_value(bars[2], "crypto"), 204.0)
-
-    def test_market_mapping(self):
-        self.assertEqual(krt.upbit_market("BTC-KRW"), "KRW-BTC")
-        self.assertEqual(krt.range_days("60d"), 60)
-        self.assertEqual(krt.range_days("6mo"), 183)
-
-    def test_bar_value_by_source(self):
-        self.assertEqual(krt.bar_value({"c": 100, "v": 3}, "krx"), 300)
-        self.assertEqual(krt.bar_value({"c": 100, "v": 3}, "crypto"), 3)   # Yahoo 코인 거래량은 이미 원화
-        self.assertEqual(krt.bar_value({"c": 100, "v": 3, "val": 290}, "crypto"), 290)
-
-
-class TestBinance(unittest.TestCase):
-    def test_parse(self):
-        rows = [[1793332800000 + 300000, "2", "3", "1", "2.5", "10", 0, "25", 5],
-                [1793332800000, "1", "2", "0.5", "2", "4", 0, "8", 3],
-                [1793332800000, "1", "2", "0.5", "2", "4", 0, "8", 3]]
-        res = krt.binance_result(rows, "BTCUSDT")
-        bars = res["bars"]
-        self.assertEqual(len(bars), 2)
-        self.assertLess(bars[0]["t"], bars[1]["t"])
-        self.assertEqual((bars[1]["o"], bars[1]["h"], bars[1]["l"], bars[1]["c"]), (2.0, 3.0, 1.0, 2.5))
-        self.assertEqual(krt.bar_value(bars[1], "crypto"), 25.0)    # USDT 거래대금
-        self.assertEqual(res["meta"]["currency"], "USDT")
-
-    def test_usdt_ticks_and_format(self):
-        self.assertEqual(krt.tick_size(77941.28, "crypto", "USDT"), 0.01)
-        self.assertEqual(krt.round_down(80824.894, "crypto", "USDT"), 80824.89)
-        self.assertEqual(krt.round_near(80824.895, "crypto", "USDT"), 80824.9)
-        self.assertEqual(krt.price_str(77941.28, "crypto"), "77,941.28")
-        self.assertEqual(krt.price_str(1.2436, "crypto"), "1.2436")
-        self.assertEqual(krt.price_str(129500, "crypto"), "129,500")
-        self.assertEqual(krt.money(114.8e6, "USDT"), "$114.8M")
-        self.assertEqual(krt.money(1.9e11, "KRW"), "1900억원")
-
-    def test_tokenized_stock_heuristic(self):
-        class Fake(object):
-            def __init__(self, meta):
-                self.meta = meta
-
-            def _yahoo(self, sym, rng, iv):
-                if sym not in self.meta:
-                    raise krt.KrtError("없음")
-                return {"meta": self.meta[sym], "bars": []}
-        f = Fake({"INTC": {"instrumentType": "EQUITY", "regularMarketPrice": 92.0},
-                  "BN": {"instrumentType": "EQUITY", "regularMarketPrice": 39.5}})
-        self.assertTrue(scan.is_tokenized_stock(f, "INTCB", 71.2))    # 토큰 가격은 장외에 벌어짐
-        self.assertFalse(scan.is_tokenized_stock(f, "BNB", 703.0))    # BNB: 가격이 전혀 다름
-        self.assertFalse(scan.is_tokenized_stock(f, "SOL", 95.0))     # B로 끝나지 않음
-        self.assertFalse(scan.is_tokenized_stock(f, "XYZB", 10.0))    # Yahoo에 없음
 
 
 class TestUniverse(unittest.TestCase):
@@ -221,13 +133,6 @@ class TestUniverse(unittest.TestCase):
         self.assertIn("120110.KS", syms)  # 코오롱인더
         self.assertIn("298050.KS", syms)  # HS효성첨단소재
         self.assertEqual(len(syms), len(krx))
-        coins = krt.load_universe(None, "universe-crypto.txt")      # 바이낸스
-        self.assertTrue(all(r["symbol"].endswith("USDT") for r in coins))
-        self.assertIn("BTCUSDT", {r["symbol"] for r in coins})
-        self.assertFalse({"GOOGLBUSDT", "INTCBUSDT", "USDCUSDT"} & {r["symbol"] for r in coins})
-        up = krt.load_universe(None, "universe-upbit.txt")
-        self.assertTrue(all(r["symbol"].endswith("-KRW") for r in up))
-        self.assertNotIn("USDT-KRW", {r["symbol"] for r in up})
 
 
 class TestSessions(unittest.TestCase):
@@ -241,13 +146,6 @@ class TestSessions(unittest.TestCase):
             self.assertEqual(len(bs), 72)
             self.assertEqual(bs[0]["t"].strftime("%H:%M"), "09:00")
             self.assertEqual(bs[-1]["t"].strftime("%H:%M"), "14:55")
-
-    def test_crypto_day_starts_0900(self):
-        t = krt.parse_kst("2026-10-29 08:55")
-        self.assertEqual(str(krt.session_day(t, "crypto")), "2026-10-28")
-        self.assertEqual(krt.slot(t, "crypto"), 287)
-        self.assertEqual(krt.slot(krt.parse_kst("2026-10-29 09:00"), "crypto"), 0)
-
 
 class TestScanner(TempDir):
     def test_orb_samsung(self):
@@ -274,26 +172,6 @@ class TestScanner(TempDir):
         for h in r["hits"]:
             self.assertTrue(h["setups"])
             self.assertIn("pctb", h)
-
-    def test_daily_crypto_drops_unfinished_day(self):
-        code, out = run(scan.main, ["daily", "--market", "crypto", "--symbols", "BTC-KRW,XRP-KRW",
-                                    "--offline", FIX, "--now", "2026-10-29 16:30", "--json"])
-        r = json.loads(out)
-        self.assertEqual(r["closes_through"], "2026-10-28")
-        code, out = run(scan.main, ["daily", "--market", "crypto", "--symbols", "BTC",
-                                    "--offline", FIX, "--now", "2026-10-30 13:00", "--json"])
-        r = json.loads(out)
-        self.assertEqual(r["fetched"], 1)
-        self.assertEqual(r["closes_through"], "2026-10-29")    # 진행 중인 10/30 일봉은 뺀다
-
-    def test_orb_binance(self):
-        code, out = run(scan.main, ["orb", "--market", "crypto", "--symbols", "BTC", "--offline", FIX,
-                                    "--now", BTC_NOW, "--json"])
-        self.assertEqual(code, 0, out)
-        h = json.loads(out)["hits"][0]
-        self.assertEqual((h["symbol"], h["at"], h["price"]), ("BTCUSDT", "10:40", 80918.0))
-        self.assertEqual((h["or_high"], h["or_low"]), (80909.78, 80740.0))
-
 
 class TestPlan(TempDir):
     def entry_exit(self):
@@ -335,25 +213,6 @@ class TestPlan(TempDir):
         r = plan.size_plan(p, krt.config(), 200000, 50000)
         self.assertIsNotNone(r["refused"])
 
-    def test_crypto_fractional(self):
-        code, out = run(plan.main, ["entry", "BTC", "--offline", FIX, "--now", BTC_NOW, "--write"])
-        self.assertEqual(code, 0, out)
-        e = krt.load_json("entry.json")
-        self.assertEqual((e["symbol"], e["entry_time"], e["entry"]), ("BTCUSDT", "10:40", 80918.0))
-        p = plan.make_plan(e, "or-mid", "1R", krt.config())
-        self.assertEqual(p["stop"], 80824.89)     # (80909.78 + 80740) / 2 = 80824.89
-        self.assertEqual(p["quote"], "USDT")
-        r = plan.size_plan(p, krt.config(), 5000000, 50000, fx=1350.0)
-        self.assertGreater(r["qty"], 0)
-        self.assertLess(r["qty"], 1)
-        self.assertEqual(r["qty"], round(r["qty"], 6))
-        self.assertAlmostEqual(r["amount"], r["amount_quote"] * 1350.0, places=4)
-        self.assertLessEqual(r["amount"], 5000000 * 0.75 + 1e-6)
-        fee = 0.001
-        loss = (80918.0 - 80824.89) * 1350 + 80918.0 * 1350 * fee + 80824.89 * 1350 * fee
-        self.assertAlmostEqual(r["loss_per_unit"], loss, places=3)
-
-
 class TestTimeMachine(TempDir):
     def make_plan(self):
         run(plan.main, ["entry", "005930", "--offline", FIX, "--now", KRX_NOW, "--write"])
@@ -386,15 +245,6 @@ class TestTimeMachine(TempDir):
         mc = {"target": 60.0, "stop": 20.0}
         self.assertIn("강하게", tm.verdict(mc, 1))
 
-    def test_crypto(self):
-        run(plan.main, ["entry", "BTC", "--offline", FIX, "--now", BTC_NOW, "--write"])
-        run(plan.main, ["exit", "--target", "1R", "--write"])
-        code, out = run(tm.main, ["run", "--offline", FIX, "--replays", "2000"])
-        self.assertEqual(code, 0, out)
-        self.assertIn("10:40부터 16:40까지", out)
-        self.assertIn("1개당 위험", out)
-
-
 class TestRepo(unittest.TestCase):
     def test_skills_have_frontmatter(self):
         for d in ("kr-scanner", "kr-plan", "kr-timemachine", "kr-news", "kr-signal"):
@@ -413,6 +263,10 @@ class TestRepo(unittest.TestCase):
                     if line.startswith("import ") or line.startswith("from "):
                         mod = line.split()[1].split(".")[0]
                         self.assertIn(mod, allowed, "%s: %s" % (rel, line))
+            with open(os.path.join(ROOT, rel), encoding="utf-8") as fh:
+                text = fh.read().lower()
+            for word in ("binance", "upbit", "usdt", "crypto"):
+                self.assertNotIn(word, text, "%s: 코인 코드는 crypto-trader 에 둔다 (%s)" % (rel, word))
 
 
 if __name__ == "__main__":

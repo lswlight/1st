@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""kr-scanner: 국내 주식·코인 차트 스캐너 (표준 라이브러리만 사용).
+"""kr-scanner: 국내 주식(코스피·코스닥) 차트 스캐너 (표준 라이브러리만 사용).
 
-  scan.py daily  --market krx|crypto   장 전: 일봉 셋업 (볼린저 스퀴즈 돌파 등)
-  scan.py orb    --market krx|crypto   장중: 개장 15분 고점 돌파
-  scan.py universe --market krx --check   종목 목록 검증 (Yahoo에 있는지, 코스피/코스닥 구분)
+  scan.py daily              장 전: 일봉 셋업 (볼린저 스퀴즈 돌파 등)
+  scan.py orb                장중: 개장 15분 고점 돌파
+  scan.py universe --check   종목 목록 검증 (Yahoo에 있는지, 코스피/코스닥 구분)
 """
 import argparse
 import os
@@ -80,12 +80,12 @@ def cmd_daily(args):
     for i, row in enumerate(syms):
         s = row["symbol"]
         try:
-            data = f.chart(s, "6mo" if market == "crypto" else "1y", "1d")
+            data = f.chart(s, "1y", "1d")
         except krt.KrtError as e:
             failed.append(s)
             continue
         bars = data["bars"]
-        # 오늘 일봉은 장이 끝나기 전엔 미완성이라 뺀다 (국내 15:30, 코인 다음날 09:00).
+        # 오늘 일봉은 장이 끝나기 전(15:30)엔 미완성이라 뺀다.
         if bars:
             t = bars[-1]["t"]
             day = krt.session_day(now, market)
@@ -133,8 +133,6 @@ def cmd_daily(args):
 def print_daily(r, show):
     mk = krt.MARKETS[r["market"]]["name"]
     print("%s 일봉 스캔: %s 종가까지 (%s 일봉)" % (mk, r["closes_through"], krt.source_label(r["market"])))
-    if r["market"] == "crypto" and krt.crypto_source() == "binance":
-        print("가격은 바이낸스 USDT, 일봉은 09:00 KST(00:00 UTC) 기준.")
     print("목록 %d개 중 %d개 수신, 유동성 통과 %d개, 스캔 %d개." % (
         r["universe"], r["fetched"], r["liquid"], r["scanned"]))
     if r["failed"]:
@@ -186,7 +184,7 @@ def cmd_orb(args):
     for i, row in enumerate(syms):
         s = row["symbol"]
         try:
-            data = f.chart(s, "1d" if market == "crypto" else "5d", "5m")
+            data = f.chart(s, "5d", "5m")
         except krt.KrtError:
             failed.append(s)
             continue
@@ -217,7 +215,7 @@ def cmd_orb(args):
             print("  %s  %-11s %-12s %12s  범위 %s~%s  +%.2f%%  거래대금 %s" % (
                 h["at"], h["symbol"], (h["name"] or "")[:10], krt.price_str(h["price"], market),
                 krt.price_str(h["or_low"], market), krt.price_str(h["or_high"], market),
-                h["pct_over"], krt.money(h["value"], krt.quote_of(h["symbol"]))))
+                h["pct_over"], krt.money(h["value"])))
         if len(hits) > args.show:
             print("  ... 외 %d개 (--show N)" % (len(hits) - args.show))
         print("늦게 돌파한 차트일수록 지금 가격에 가깝습니다. " + krt.DISCLAIMER)
@@ -228,98 +226,8 @@ def cmd_orb(args):
 
 # ------------------------------------------------------------------ universe
 
-def binance_universe(args):
-    """바이낸스 현물 USDT 마켓 중 24시간 거래대금 상위 N개 (스테이블·레버리지 토큰 제외). 한글 이름은 업비트에서."""
-    f = krt.Fetcher(None, args.pause)
-    tick = f._get(krt.BINANCE + "/ticker/24hr?type=MINI", "USDT", "바이낸스")
-    ko = {}
-    try:
-        for m in f._get(krt.UPBIT + "/market/all", "KRW", "업비트"):
-            if m["market"].startswith("KRW-"):
-                ko[m["market"][4:]] = m.get("korean_name", "")
-    except krt.KrtError:
-        pass
-    rows = []
-    for t in tick:
-        sym = t["symbol"]
-        if not sym.endswith("USDT"):
-            continue
-        base = sym[:-4]
-        if base in krt.STABLES or base.endswith(("UP", "DOWN", "BULL", "BEAR")) and len(base) > 4:
-            continue
-        rows.append((float(t.get("quoteVolume") or 0), sym, base, float(t.get("lastPrice") or 0)))
-    rows.sort(reverse=True)
-    out, stocks = [], []
-    for _, sym, base, last in rows:
-        if len(out) >= args.top:
-            break
-        if is_tokenized_stock(f, base, last):
-            stocks.append(base)
-            continue
-        out.append("%s|%s|%s" % (sym, ko.get(base, ""), base))
-    dest = args.dest or os.path.join(os.path.dirname(os.path.realpath(__file__)), "universe-crypto.txt")
-    with open(dest, "w", encoding="utf-8") as fh:
-        fh.write("# SYMBOL|한글 이름(업비트)|티커  (바이낸스 현물 USDT 24시간 거래대금 상위 %d개, 스테이블 제외)\n" % args.top)
-        fh.write("\n".join(out) + "\n")
-    print("바이낸스 USDT 마켓 %d개 중 거래대금 상위 %d개 저장: %s" % (len(rows), len(out), dest))
-    if stocks:
-        print("토큰화 주식이라 뺀 종목: %s" % ", ".join(stocks))
-    return 0
-
-
-def is_tokenized_stock(f, base, last):
-    """바이낸스 토큰화 주식(GOOGLB, INTCB 등)인지: 끝의 B를 뗀 티커가 Yahoo에서 미국 주식·ETF이고
-    가격이 40% 안으로 비슷하면 (토큰 가격은 장외 시간에 벌어진다) 주식으로 본다 (BNB 처럼 B로 끝나는 코인은 가격이 달라 남는다)."""
-    if not base.endswith("B") or len(base) < 3 or last <= 0:
-        return False
-    try:
-        d = f._yahoo(base[:-1], "5d", "1d")
-    except krt.KrtError:
-        return False
-    m = d["meta"]
-    px = m.get("regularMarketPrice") or (d["bars"][-1]["c"] if d["bars"] else 0)
-    return m.get("instrumentType") in ("EQUITY", "ETF") and px and abs(last / px - 1) < 0.4
-
-
-def upbit_universe(args):
-    """업비트 원화 마켓 중 24시간 거래대금 상위 N개 (유의 종목 제외)."""
-    f = krt.Fetcher(None, args.pause, "upbit")
-    markets = f._get(krt.UPBIT + "/market/all?isDetails=true", "KRW", "업비트")
-    krw = {m["market"]: m for m in markets if m["market"].startswith("KRW-")}
-    # 투자유의 종목과 스테이블코인(차트 분석 의미 없음)은 뺀다.
-    warn = {k for k, m in krw.items() if (m.get("market_event") or {}).get("warning")
-            or (m.get("market_warning") or "NONE") != "NONE"}
-    stable = {"KRW-USDT", "KRW-USDC", "KRW-USDS", "KRW-USDE", "KRW-DAI", "KRW-PYUSD"}
-    keys = sorted(krw)
-    tick = []
-    for i in range(0, len(keys), 100):
-        tick += f._get(krt.UPBIT + "/ticker?markets=" + ",".join(keys[i:i + 100]), "KRW", "업비트")
-    tick.sort(key=lambda t: -t.get("acc_trade_price_24h", 0))
-    out = []
-    for t in tick:
-        if t["market"] in warn or t["market"] in stable:
-            continue
-        m = krw[t["market"]]
-        out.append("%s-KRW|%s|%s" % (t["market"][4:], m.get("korean_name", ""), m.get("english_name", "")))
-        if len(out) >= args.top:
-            break
-    dest = args.dest or os.path.join(os.path.dirname(os.path.realpath(__file__)), "universe-upbit.txt")
-    with open(dest, "w", encoding="utf-8") as fh:
-        fh.write("# SYMBOL|한글 이름|영문 이름  (업비트 원화 마켓 24시간 거래대금 상위 %d개, 투자유의·스테이블코인 제외)\n" % args.top)
-        fh.write("\n".join(out) + "\n")
-    print("업비트 원화 마켓 %d개 중 거래대금 상위 %d개 저장 (투자유의 %d개·스테이블코인 제외): %s" % (
-        len(krw), len(out), len(warn), dest))
-    return 0
-
-
 def cmd_universe(args):
     market = args.market
-    if args.check and market == "crypto" and not args.source:
-        src = args.exchange or krt.crypto_source()
-        if src == "binance":
-            return binance_universe(args)
-        if src == "upbit":
-            return upbit_universe(args)
     if not args.check:
         rows = krt.load_universe(market)
         for r in rows:
@@ -367,13 +275,13 @@ def cmd_universe(args):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="국내 주식·코인 차트 스캐너 (kr-scanner)")
+    ap = argparse.ArgumentParser(description="국내 주식 차트 스캐너 (kr-scanner)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in ("daily", "orb"):
         p = sub.add_parser(name)
-        p.add_argument("--market", choices=("krx", "crypto"), default="krx")
+        p.set_defaults(market="krx")
         g = p.add_mutually_exclusive_group()
-        g.add_argument("--symbols", help="005930,000660 또는 BTC,ETH")
+        g.add_argument("--symbols", help="005930,000660")
         g.add_argument("--watchlist", help="krt/watchlist.json 같은 파일")
         p.add_argument("--limit", type=int)
         p.add_argument("--min-price", type=float, default=0)
@@ -392,12 +300,10 @@ def main(argv=None):
             p.add_argument("--or-minutes", type=int)
             p.add_argument("--at", help="HH:MM 이 시각까지만 본다")
     p = sub.add_parser("universe")
-    p.add_argument("--market", choices=("krx", "crypto"), default="krx")
+    p.set_defaults(market="krx")
     p.add_argument("--check", action="store_true", help="후보 목록을 Yahoo로 검증해 universe 파일을 다시 만든다")
     p.add_argument("--source")
     p.add_argument("--dest")
-    p.add_argument("--top", type=int, default=30, help="코인: 거래대금 상위 N개 (기본 30)")
-    p.add_argument("--exchange", choices=("binance", "upbit"), help="코인 목록을 만들 거래소 (기본: crypto_source)")
     p.add_argument("--pause", type=float, default=0.2)
     args = ap.parse_args(argv)
     try:

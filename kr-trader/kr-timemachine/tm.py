@@ -163,13 +163,8 @@ def cmd_run(args):
                 "stop_rule": args.stop_rule or "price:%s" % args.stop, "or_minutes": cfg["or_minutes"],
                 "entry_time": args.entry_time}
         t = krt.parse_kst(args.date + " " + args.entry_time)
-        if market == "crypto" and t < krt.session_open(krt.parse_kst(args.date + " 00:00").date(), market):
-            t += timedelta(days=1)
         plan["entry_bar"] = krt.slot(t, market) - 1
-        if market == "krx":
-            plan["hold_until"] = krt.at_time(t.date(), args.until or cfg["krx_flat_by"]).isoformat()
-        else:
-            plan["hold_until"] = (t + timedelta(hours=cfg["crypto_hold_hours"])).isoformat()
+        plan["hold_until"] = krt.at_time(t.date(), args.until or cfg["krx_flat_by"]).isoformat()
     else:
         plan = krt.load_json(args.input)
         if not plan:
@@ -205,7 +200,7 @@ def cmd_run(args):
     print("%s %s 매수, %s: 진입 %s (%s), 손절 %s, 목표 %s (%gR, %s 위험 %s)" % (
         plan["symbol"], krt.names().get(plan["symbol"], ""), plan["date"], ps(plan["entry"]),
         plan.get("entry_time") or krt.fmt_time(start_t), ps(plan["stop"]), ps(plan["target"]),
-        plan["target_r"], "주당" if m == "krx" else "1개당", ps(plan["entry"] - plan["stop"])))
+        plan["target_r"], "주당", ps(plan["entry"] - plan["stop"])))
     print("%s부터 %s까지 남은 5분봉 %d개를 %s번 다시 만들었습니다 (시드 %d)." % (
         krt.fmt_time(start_t), krt.fmt_time(end_t), mc["bars"], "{:,}".format(mc["n"]), mc["seed"]))
     print("각 봉은 이 종목의 최근 전체 세션 %d개(%s ~ %s) 중 같은 시간대(앞뒤 %d봉) 실제 봉에서 골랐습니다." % (

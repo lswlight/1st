@@ -1,6 +1,6 @@
 ---
 name: kr-plan
-description: 국내 주식·코인 매수 계획 도구. 5분봉으로 진입 신호(개장 15분 범위 돌파, 5분봉 볼린저 상단 돌파, 가격 레벨 돌파)를 확인하고, 진입 전에 손절가(범위 중간·범위 저가·볼린저 중심선·퍼센트·직접 지정)와 목표가(1R·2R·직접 지정)를 호가 단위에 맞춰 정한 뒤, 원화 계좌와 1회 최대 손실에 맞춰 수량을 계산한다. 국내는 수수료와 증권거래세, 코인은 거래 수수료를 반영하고 코인은 소수점 수량. 바이낸스(USDT) 가격은 업비트 USDT 원화가로 환산해 원화 계좌 기준으로 계산하고 김치 프리미엄도 보여 준다. 주문은 내지 않는다. 사용자가 "진입 시점", "돌파했어?", "손절 어디", "목표가", "손익비", "몇 주 사", "얼마나 사", "500만 원 계좌", "최대 손실 5만 원", "비트코인 몇 개" 등을 말하면 쓴다. 미국 주식은 trader-entry, trader-exit, trader-budget.
+description: 국내 주식 매수 계획 도구. 5분봉으로 진입 신호(개장 15분 범위 돌파, 5분봉 볼린저 상단 돌파, 가격 레벨 돌파)를 확인하고, 진입 전에 손절가(범위 중간·범위 저가·볼린저 중심선·퍼센트·직접 지정)와 목표가(1R·2R·직접 지정)를 호가 단위에 맞춰 정한 뒤, 원화 계좌와 1회 최대 손실에 맞춰 수량을 계산한다. 수수료와 증권거래세를 반영한다. 주문은 내지 않는다. 사용자가 "진입 시점", "돌파했어?", "손절 어디", "목표가", "손익비", "몇 주 사", "얼마나 사", "500만 원 계좌", "최대 손실 5만 원" 등을 말하면 쓴다. 코인은 coin-plan, 미국 주식은 trader-entry, trader-exit, trader-budget.
 ---
 
 # kr-plan
@@ -13,8 +13,6 @@ description: 국내 주식·코인 매수 계획 도구. 5분봉으로 진입 �
 python3 "<이 폴더>/plan.py" entry 005930 --write                 # 개장 범위 돌파 확인 -> krt/entry.json
 python3 "<이 폴더>/plan.py" entry 005930 --setup bb --write      # 5분봉 볼린저 상단 돌파
 python3 "<이 폴더>/plan.py" entry 120110 --setup level --level 52000 --write
-python3 "<이 폴더>/plan.py" entry BTC --write                    # 코인: 바이낸스 BTCUSDT (09:00 KST 범위)
-python3 "<이 폴더>/plan.py" entry BTC-KRW --write                # 코인: 업비트 원화
 python3 "<이 폴더>/plan.py" exit --stop or-mid --target 1R --write   # -> krt/plan.json
 python3 "<이 폴더>/plan.py" exit --symbol 005930 --entry 245500 --or-high 244500 --or-low 239000 --entry-time 09:25
 python3 "<이 폴더>/plan.py" size --budget 5000000 --max-loss 50000 --write   # -> krt/order.json (제안서)
@@ -43,10 +41,10 @@ python3 "<이 폴더>/plan.py" show
 
 - 손절은 **호가 단위로 내림**, 목표는 진입가 + R x 손절폭을 호가 단위로 반올림한다.
   국내 호가 단위: 2천 미만 1원, 5천 미만 5원, 2만 미만 10원, 5만 미만 50원, 20만 미만 100원,
-  50만 미만 500원, 그 이상 1,000원. 코인은 근사 단위다.
+  50만 미만 500원, 그 이상 1,000원.
 - 거부: 손절이 진입가 이상, 목표가 진입가 이하, 손절폭이 2틱 또는 0.1% 미만.
-- 왕복 비용이 손절폭의 25% 이상이면 경고한다 (코인처럼 범위가 좁을 때 흔하다).
-- 청산 시한: 국내 14:50 (Yahoo 5분봉이 15:00까지라서), 코인은 진입 후 6시간.
+- 왕복 비용(수수료·세금)이 손절폭의 25% 이상이면 경고한다.
+- 청산 시한: 14:50 (Yahoo 5분봉이 15:00까지라서).
 
 ## 수량 (원화)
 
@@ -58,9 +56,7 @@ python3 "<이 폴더>/plan.py" show
 | 종목당 상한 | 계좌 x 75% ÷ 진입가 |
 | 현금 | 계좌 x 90% ÷ (진입가 + 매수 비용) |
 
-- 비용 기본값: 국내 수수료 0.015%, 매도 시 증권거래세 0.20%, 바이낸스 0.10%, 업비트 0.05%.
-- 바이낸스 USDT 가격은 원/USDT 환율로 원화로 바꿔 계산한다: `usdkrw` 설정값 → 업비트 KRW-USDT 체결가 → Yahoo 환율 순.
-  USDT 수량은 소수점 6자리(근사), 원화 코인은 8자리.
+- 비용 기본값: 수수료 0.015%, 매도 시 증권거래세 0.20%.
   세율과 수수료는 증권사·시기마다 다르니 `krt/config.json` 에서 고친다.
 - 국내는 정수 주. 최소 주문 5,000원.
 - 거부: 0주, 최소 주문 미만, 손익비(비용 전)가 `min_reward_risk` 미만.
@@ -70,7 +66,7 @@ python3 "<이 폴더>/plan.py" show
 
 `budget_krw`, `max_loss_per_trade_krw`, `cash_buffer_pct`, `max_position_pct`, `min_order_krw`,
 `min_reward_risk`, `or_minutes`, `bb_period`, `bb_k`, `krx_commission_pct`, `krx_sell_tax_pct`,
-`crypto_fee_pct`, `binance_fee_pct`, `usdkrw`, `crypto_source`, `krx_flat_by`, `krx_last_entry`, `crypto_hold_hours`. 예시는 `config.example.json`.
+`krx_flat_by`, `krx_last_entry`. 예시는 `config.example.json`.
 계좌 금액과 최대 손실은 사용자가 말한 값만 쓴다. 추측하지 않는다.
 
 ## 순서

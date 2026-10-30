@@ -1,6 +1,6 @@
 ---
 name: kr-news
-description: 국내 주식·코인 종목의 공시와 뉴스를 정리한다. 국내 종목은 OpenDART 공시(실적, 유상증자, 전환사채, 최대주주 변경, 자기주식, 소송, 거래정지 등)를 먼저 보고, 코인은 CoinGecko·CoinMarketCap 뉴스를 본다. 오늘 등락과 나란히 보여 주고 차트 셋업에 영향을 줄 재료를 짚는다. 사용자가 "공시 확인", "왜 올랐어", "왜 빠졌어", "재료", "뉴스 정리", "유상증자", "실적 발표", "코인 뉴스" 등을 말하거나 kr-scanner 결과 종목을 고른 뒤에 쓴다. 미국 주식은 trader-news.
+description: 국내 주식 종목의 공시와 뉴스를 정리한다. OpenDART 공시(실적, 유상증자, 전환사채, 최대주주 변경, 자기주식, 소송, 거래정지 등)를 먼저 본다. 오늘 등락과 나란히 보여 주고 차트 셋업에 영향을 줄 재료를 짚는다. 사용자가 "공시 확인", "왜 올랐어", "왜 빠졌어", "재료", "뉴스 정리", "유상증자", "실적 발표", "뉴스" 등을 말하거나 kr-scanner 결과 종목을 고른 뒤에 쓴다. 코인은 coin-news, 미국 주식은 trader-news.
 ---
 
 # kr-news
@@ -14,8 +14,6 @@ description: 국내 주식·코인 종목의 공시와 뉴스를 정리한다. �
 | --- | --- |
 | 국내 공시 | PlayMCP OpenDART: `opendart-find_company` (회사 고유번호), `opendart-search_disclosures` (공시 목록), `opendart-get_major_stock`, `opendart-get_capital_change` 등 |
 | 국내 등락 | `python3 "<kr-plan 폴더>/plan.py" entry 종목` 의 현재가, 또는 Yahoo 일봉 |
-| 코인 뉴스 | CoinGecko `get-crypto-news`, CoinMarketCap `get_crypto_latest_news` |
-| 코인 시세 | CoinGecko `get-coin-markets`, Crypto.com `get_ticker` |
 | 영문 헤드라인 | Yahoo RSS `https://feeds.finance.yahoo.com/rss/2.0/headline?s=005930.KS` (대형주만, 영어) |
 
 연결이 끊긴 도구는 그렇다고 말하고, 다른 도구로 대신하되 지어내지 않는다.
@@ -34,7 +32,7 @@ description: 국내 주식·코인 종목의 공시와 뉴스를 정리한다. �
 ## 순서
 
 1. 종목을 정한다 (사용자 지정, 또는 `krt/watchlist.json` 의 hits).
-2. 국내: OpenDART 로 최근 1~3일 공시를 본다. 코인: 최근 24시간 뉴스.
+2. OpenDART 로 최근 1~3일 공시를 본다.
 3. 종목별로 짧게: 무슨 일, 출처와 링크(공시는 접수번호), 오늘 등락, 셋업에 미치는 영향 한 줄
    (예: "장 마감 후 유상증자 공시: 내일 갭이 손절을 건너뛸 수 있음").
 4. 그림을 바꾸는 재료가 있으면 `/kr-plan` 전에 먼저 말한다. 헤드라인 하나로 행동하지 않는다.

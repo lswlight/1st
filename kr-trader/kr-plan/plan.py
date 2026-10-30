@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""kr-plan: 진입 확인, 손절·목표 계획, 수량 계산 (국내 주식·코인, 매수만).
+"""kr-plan: 국내 주식 진입 확인, 손절·목표 계획, 수량 계산 (매수만).
 
   plan.py entry 005930 --setup orb|bb|level [--level 250000] [--write]
   plan.py exit  [--stop or-mid|or-low|bb-mid|pct:1.5|price:240000] [--target 1R|2R|price:X] [--write]
@@ -64,7 +64,7 @@ def cmd_entry(args):
     if now < open_t + timedelta(minutes=or_min):
         krt.die("%s: 아직 개장 %d분 범위가 만들어지는 중입니다 (%s 이후 다시)." % (
             sym, or_min, krt.fmt_time(open_t + timedelta(minutes=or_min))))
-    data = f.chart(sym, "1d" if market == "crypto" else "5d", "5m")
+    data = f.chart(sym, "5d", "5m")
     bars = krt.five_minute_bars(data["bars"], market, until or now)
     r = krt.orb_check(bars, market, day, now, or_min, until)
     if r["status"] in ("no_data", "gap"):
@@ -112,12 +112,6 @@ def cmd_entry(args):
         print("대기 중: 아직 조건을 만족한 5분봉이 없습니다%s." % gap)
     else:
         print("만료: 신규 진입 마감(%s)까지 신호가 없었습니다." % cfg["krx_last_entry"])
-    if krt.quote_of(sym) == "USDT" and not args.offline and r.get("last"):
-        k = krt.kimchi(sym, r["last"], f)
-        if k:
-            res["kimchi"] = k
-            print("업비트 원화가 %s원 = 바이낸스 환산(1 USDT %s원) 대비 %+.2f%% (김치 프리미엄)" % (
-                "{:,.0f}".format(k["upbit_krw"]), "{:,.1f}".format(k["fx"]), k["premium_pct"]))
     if args.write:
         p = krt.save_json(args.write, res)
         print("저장: %s" % p)
@@ -129,7 +123,7 @@ def cmd_entry(args):
 
 def make_plan(e, stop_rule, target_rule, cfg, now=None):
     market = e["market"]
-    quote = krt.quote_of(e["symbol"])
+    quote = "KRW"
     entry = float(e["entry"])
     rule = stop_rule
     if rule == "or-mid":
@@ -175,17 +169,8 @@ def make_plan(e, stop_rule, target_rule, cfg, now=None):
         raise krt.KrtError("목표 규칙은 1R, 2R, price:X 형식입니다")
     if target <= entry:
         raise krt.KrtError("목표가가 진입가 이하입니다")
-    if market == "krx":
-        flat_by = cfg["krx_flat_by"]
-        hold_until = krt.at_time(krt.parse_kst(e["date"] + " 00:00").date(), flat_by)
-    else:
-        day = krt.parse_kst(e["date"] + " 00:00").date()
-        start = krt.session_open(day, market)
-        et = krt.parse_kst(e["date"] + " " + e["entry_time"])
-        if et < start:
-            et += timedelta(days=1)
-        hold_until = min(et + timedelta(hours=cfg["crypto_hold_hours"]), start + timedelta(days=1) - krt.BAR)
-        flat_by = krt.fmt_time(hold_until)
+    flat_by = cfg["krx_flat_by"]
+    hold_until = krt.at_time(krt.parse_kst(e["date"] + " 00:00").date(), flat_by)
     return {"symbol": e["symbol"], "market": market, "date": e["date"], "setup": e.get("setup", "orb"),
             "entry": entry, "entry_time": e.get("entry_time"), "entry_bar": e.get("entry_bar"),
             "or_high": e.get("or_high"), "or_low": e.get("or_low"), "or_minutes": e.get("or_minutes", 15),
@@ -227,16 +212,15 @@ def cmd_exit(args):
     print("  진입     %s%s" % (ps(p["entry"]), (" (%s)" % p["entry_time"]) if p["entry_time"] else ""))
     print("  손절     %s  %s, 호가 단위로 내림" % (ps(p["stop"]), p["stop_why"]))
     print("  목표     %s  %s" % (ps(p["target"]), p["target_why"]))
-    print("  %s %s (진입가의 %.2f%%)" % ("주당 위험" if m == "krx" else "1개당 위험", ps(p["risk"]), p["risk"] / p["entry"] * 100))
+    print("  주당 위험 %s (진입가의 %.2f%%)" % (ps(p["risk"]), p["risk"] / p["entry"] * 100))
     print("  손익비   %.2f (수수료·세금 전)" % p["reward_risk"])
     print("  청산 시한 %s, 결과와 관계없이 정리" % p["flat_by"])
-    if m == "krx":
-        print("  (Yahoo 5분봉이 15:00까지만 있어 기본 청산 시한을 14:50으로 둡니다)")
-    cb, cs = costs(m, cfg, krt.quote_of(p["symbol"]))
+    print("  (Yahoo 5분봉이 15:00까지만 있어 기본 청산 시한을 14:50으로 둡니다)")
+    cb, cs = costs(m, cfg)
     cost = p["entry"] * cb + p["stop"] * cs
     if cost / p["risk"] >= 0.25:
         print("  주의: 손절 시 왕복 비용(수수료%s)이 손절폭의 %.0f%%입니다. 손절폭이 비용에 비해 좁습니다." % (
-            "·세금" if m == "krx" else "", cost / p["risk"] * 100))
+            "·세금", cost / p["risk"] * 100))
     if args.write:
         print("저장: %s" % krt.save_json(args.write, p))
     print("손절가는 계획이지 보장이 아닙니다. 갭이나 급변 때는 더 불리하게 체결될 수 있습니다.")
@@ -246,36 +230,26 @@ def cmd_exit(args):
 # ------------------------------------------------------------------ size
 
 def costs(market, cfg, quote="KRW"):
-    """(매수 비용률, 매도 비용률). 국내: 수수료 + 매도 시 증권거래세. 코인: 거래소 수수료 (바이낸스·업비트)."""
-    if market == "krx":
-        c = cfg["krx_commission_pct"] / 100
-        return c, c + cfg["krx_sell_tax_pct"] / 100
-    f = (cfg["binance_fee_pct"] if quote == "USDT" else cfg["crypto_fee_pct"]) / 100
-    return f, f
+    """(매수 비용률, 매도 비용률) = (수수료, 수수료 + 매도 시 증권거래세)."""
+    c = cfg["krx_commission_pct"] / 100
+    return c, c + cfg["krx_sell_tax_pct"] / 100
 
 
-def size_plan(p, cfg, budget=None, max_loss=None, fx=1.0):
-    """계좌와 최대 손실은 원화. USDT 가격은 fx(원/USDT)로 원화로 바꿔 계산한다."""
+def size_plan(p, cfg, budget=None, max_loss=None):
+    """계좌와 최대 손실(원)으로 정수 주 수량을 정한다."""
     market = p["market"]
-    quote = krt.quote_of(p["symbol"])
     budget = float(budget if budget is not None else cfg["budget_krw"])
     max_loss = float(max_loss if max_loss is not None else cfg["max_loss_per_trade_krw"])
-    fx = float(fx) if quote == "USDT" else 1.0
-    entry, stop, target = p["entry"] * fx, p["stop"] * fx, p["target"] * fx
-    cb, cs = costs(market, cfg, quote)
+    entry, stop, target = p["entry"], p["stop"], p["target"]
+    cb, cs = costs(market, cfg)
     loss_ps = (entry - stop) + entry * cb + stop * cs
     gain_ps = (target - entry) - entry * cb - target * cs
-    whole = market == "krx"
-
     def qty(x):
-        if whole:
-            return max(int(math.floor(x + 1e-9)), 0)
-        dp = 6 if quote == "USDT" else 8   # 바이낸스는 수량 단위가 더 거칠다 (근사)
-        return max(math.floor(x * 10 ** dp) / 10 ** dp, 0.0)
+        return max(int(math.floor(x + 1e-9)), 0)
 
     cash = budget * (1 - cfg["cash_buffer_pct"] / 100)
     limits = [
-        ("최대 손실", "%s ÷ %s 손실 %s" % (krt.won(max_loss), "주당" if whole else "1개당", krt.won(loss_ps)), qty(max_loss / loss_ps)),
+        ("최대 손실", "%s ÷ 주당 손실 %s" % (krt.won(max_loss), krt.won(loss_ps)), qty(max_loss / loss_ps)),
         ("종목당 상한 (%g%%)" % cfg["max_position_pct"],
          "%s ÷ %s" % (krt.won(budget * cfg["max_position_pct"] / 100), krt.won(entry)),
          qty(budget * cfg["max_position_pct"] / 100 / entry)),
@@ -289,10 +263,9 @@ def size_plan(p, cfg, budget=None, max_loss=None, fx=1.0):
     res = {"symbol": p["symbol"], "market": market, "qty": q, "limits": limits, "binding": binding,
            "amount": q * entry, "loss_at_stop": q * loss_ps, "gain_at_target": q * gain_ps,
            "loss_per_unit": loss_ps, "gross_rr": round(gross_rr, 2), "net_rr": round(net_rr, 2),
-           "budget": budget, "max_loss": max_loss, "refused": None, "fx": fx, "quote": quote,
-           "amount_quote": q * p["entry"]}
+           "budget": budget, "max_loss": max_loss, "refused": None}
     if q <= 0:
-        res["refused"] = "1%s도 살 수 없습니다: %s 한도에 걸립니다" % ("주" if whole else "단위", binding)
+        res["refused"] = "1%s도 살 수 없습니다: %s 한도에 걸립니다" % ("주", binding)
     elif q * entry < cfg["min_order_krw"]:
         res["refused"] = "주문 금액 %s이 최소 주문 %s보다 작습니다" % (krt.won(q * entry), krt.won(cfg["min_order_krw"]))
     elif gross_rr + 1e-9 < cfg["min_reward_risk"]:
@@ -305,21 +278,16 @@ def cmd_size(args):
     p = krt.load_json(args.input)
     if not p:
         krt.die("계획(%s)이 없습니다. 먼저 plan.py exit --write 를 돌리세요." % args.input)
-    fx, fx_src = 1.0, None
-    if krt.quote_of(p["symbol"]) == "USDT":
-        fx, fx_src = krt.usdkrw(krt.Fetcher(), cfg)
-    r = size_plan(p, cfg, args.budget, args.max_loss, fx)
+    r = size_plan(p, cfg, args.budget, args.max_loss)
     m = p["market"]
-    unit = "주" if m == "krx" else ""
+    unit = "주"
     print("%s %s 매수 수량 계산: 진입 %s, 손절 %s, 목표 %s" % (
         p["symbol"], krt.names().get(p["symbol"], ""), krt.price_str(p["entry"], m),
         krt.price_str(p["stop"], m), krt.price_str(p["target"], m)))
-    cb, cs = costs(m, cfg, r["quote"])
-    if fx_src:
-        print("가격은 USDT, 계산은 원화: 1 USDT = %s원 (%s)" % ("{:,.1f}".format(fx), fx_src))
+    cb, cs = costs(m, cfg)
     print("계좌 %s, 1회 최대 손실 %s. 비용: 매수 %.3f%%, 매도 %.3f%%%s" % (
         krt.won(r["budget"]), krt.won(r["max_loss"]), cb * 100, cs * 100,
-        " (수수료 + 증권거래세)" if m == "krx" else " (거래소 수수료)"))
+        " (수수료 + 증권거래세)"))
     print("한도 (가장 작은 값이 수량을 정합니다):")
     for name, how, q in r["limits"]:
         mark = "  <- 결정" if name == r["binding"] else ""
@@ -327,8 +295,7 @@ def cmd_size(args):
     if r["refused"]:
         print("주문 제안 없음: %s" % r["refused"])
         return 1
-    usd = " (%s USDT)" % "{:,.2f}".format(r["amount_quote"]) if r["quote"] == "USDT" else ""
-    print("수량: %s%s, 금액 %s%s" % (r["qty"], unit, krt.won(r["amount"]), usd))
+    print("수량: %s%s, 금액 %s" % (r["qty"], unit, krt.won(r["amount"])))
     print("손절 시 예상 손실 %s (비용 포함), 목표 도달 시 손익비 %.2f (비용 포함, 비용 전 %.2f)" % (
         krt.won(r["loss_at_stop"]), r["net_rr"], r["gross_rr"]))
     if r["net_rr"] < cfg["min_reward_risk"]:
