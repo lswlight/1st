@@ -19,7 +19,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -279,6 +282,15 @@ private fun App(vm: GalleryViewModel = viewModel()) {
                 monthOwner!!.copy(name = "${monthOwner.name} · ${month.first}", photos = month.second),
                 onBack = { openMonth = null },
                 onPhoto = { openPhotoId = it.id },
+                folders = state.customFolders,
+                onAddToFolder = { name, ids ->
+                    vm.addToFolder(name, ids)
+                    Toast.makeText(context, "${ids.size}개를 '$name' 폴더에 넣었습니다.", Toast.LENGTH_SHORT).show()
+                },
+                onRemoveFromFolder = { ids ->
+                    vm.removeFromFolder(ids)
+                    Toast.makeText(context, "${ids.size}개를 폴더에서 뺐습니다. 자동 분류로 돌아갑니다.", Toast.LENGTH_SHORT).show()
+                },
             )
         }
         monthOwner != null -> {
@@ -305,6 +317,11 @@ private fun App(vm: GalleryViewModel = viewModel()) {
                 }
             },
             onGroup = { openGroup = it.name },
+            onCreateFolder = { name ->
+                val ok = vm.createFolder(name)
+                if (!ok) Toast.makeText(context, "이미 있는 이름입니다.", Toast.LENGTH_SHORT).show()
+            },
+            onDeleteFolder = vm::deleteFolder,
         )
     }
 }
@@ -342,7 +359,28 @@ private fun GroupListScreen(
     onResetAnchors: () -> Unit,
     onSetByAddress: (name: String, query: String) -> Unit,
     onGroup: (PhotoGroup) -> Unit,
+    onCreateFolder: (String) -> Unit,
+    onDeleteFolder: (String) -> Unit,
 ) {
+    var creating by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf<String?>(null) }
+    if (creating) {
+        TextInputDialog(
+            title = "새 폴더",
+            placeholder = "예: 아기 성장, 가족여행",
+            onConfirm = { onCreateFolder(it); creating = false },
+            onDismiss = { creating = false },
+        )
+    }
+    deleting?.let { name ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("'$name' 폴더를 지울까요?") },
+            text = { Text("폴더만 지워지고 사진·동영상 원본은 그대로 남습니다. 안에 있던 항목은 자동 분류로 돌아갑니다.") },
+            confirmButton = { TextButton(onClick = { onDeleteFolder(name); deleting = null }) { Text("지우기") } },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("취소") } },
+        )
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -402,8 +440,20 @@ private fun GroupListScreen(
             }
 
             LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+                if (state.loaded) {
+                    item(key = "new-folder") {
+                        TextButton(onClick = { creating = true }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                            Text("＋ 새 폴더")
+                        }
+                    }
+                }
                 items(state.groups, key = { it.name }) { group ->
-                    GroupRow(group, onClick = { onGroup(group) })
+                    GroupRow(
+                        group,
+                        onClick = { onGroup(group) },
+                        // 내 폴더는 길게 눌러 지운다.
+                        onLongClick = group.customFolder?.let { name -> { deleting = name } },
+                    )
                     HorizontalDivider()
                 }
             }
@@ -420,8 +470,9 @@ private fun AnchorCard(
     // 주소 입력 창을 띄운 대상: "home" / "work" / null(닫힘)
     var addressFor by remember { mutableStateOf<String?>(null) }
     addressFor?.let { name ->
-        AddressDialog(
+        TextInputDialog(
             title = if (name == "home") "집 주소 입력" else "회사 주소 입력",
+            placeholder = "예: 서울 중구 세종대로 110",
             onConfirm = { query ->
                 onSetByAddress(name, query)
                 addressFor = null
@@ -470,7 +521,12 @@ private fun AnchorCard(
 }
 
 @Composable
-private fun AddressDialog(title: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+private fun TextInputDialog(
+    title: String,
+    placeholder: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
     var text by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -479,7 +535,7 @@ private fun AddressDialog(title: String, onConfirm: (String) -> Unit, onDismiss:
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
-                placeholder = { Text("예: 서울 중구 세종대로 110") },
+                placeholder = { Text(placeholder) },
                 singleLine = true,
             )
         },
@@ -668,13 +724,24 @@ private fun Notice(text: String) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun GroupRow(group: PhotoGroup, onClick: () -> Unit) {
+private fun GroupRow(group: PhotoGroup, onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Thumbnail(group.photos.first(), Modifier.size(64.dp).clip(RoundedCornerShape(8.dp)))
+        val cover = group.photos.firstOrNull()
+        if (cover != null) {
+            Thumbnail(cover, Modifier.size(64.dp).clip(RoundedCornerShape(8.dp)))
+        } else {
+            Box(
+                Modifier.size(64.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) { Text("📁") }
+        }
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(
@@ -684,9 +751,13 @@ private fun GroupRow(group: PhotoGroup, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "${group.photos.size}장" +
-                    (if (group.subgroups.isNotEmpty()) " · ${group.subgroups.size}곳" else "") +
-                    " · ${dateRange(group.photos)}",
+                if (group.photos.isEmpty()) {
+                    "비어 있음 · 길게 눌러 삭제"
+                } else {
+                    "${group.photos.size}장" +
+                        (if (group.subgroups.isNotEmpty()) " · ${group.subgroups.size}곳" else "") +
+                        " · ${dateRange(group.photos)}"
+                },
                 style = MaterialTheme.typography.bodySmall,
             )
         }
@@ -784,6 +855,15 @@ private fun MonthListScreen(group: PhotoGroup, onBack: () -> Unit, onMonth: (Str
         },
     ) { padding ->
         LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            if (group.photos.isEmpty()) {
+                item {
+                    Text(
+                        "아직 비어 있습니다. 다른 그룹의 사진 목록에서 사진을 길게 눌러 선택한 뒤 '폴더에 넣기'를 누르세요.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+            }
             items(group.months, key = { it.first }) { (label, photos) ->
                 Row(
                     modifier = Modifier.fillMaxWidth().clickable { onMonth(label) }
@@ -804,28 +884,95 @@ private fun MonthListScreen(group: PhotoGroup, onBack: () -> Unit, onMonth: (Str
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * 사진 목록. 사진을 길게 누르면 선택 모드가 되어 여러 장을 골라
+ * 내 폴더에 넣거나(내 폴더 안에서는) 폴더에서 뺄 수 있다.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-private fun GroupScreen(group: PhotoGroup, onBack: () -> Unit, onPhoto: (Photo) -> Unit) {
+private fun GroupScreen(
+    group: PhotoGroup,
+    onBack: () -> Unit,
+    onPhoto: (Photo) -> Unit,
+    folders: List<String>,
+    onAddToFolder: (name: String, ids: Set<Long>) -> Unit,
+    onRemoveFromFolder: (ids: Set<Long>) -> Unit,
+) {
     val context = LocalContext.current
     // 사진은 최신순으로 정렬돼 있으므로 groupBy 결과도 최신 날짜부터 나온다.
     val days = remember(group) { group.photos.groupBy { DAY_FORMAT.format(Date(it.dateTaken)) } }
+    var selected by remember(group.name) { mutableStateOf(emptySet<Long>()) }
+    var picking by remember { mutableStateOf(false) }
+    var naming by remember { mutableStateOf(false) }
+    val selecting = selected.isNotEmpty()
+    fun toggle(photo: Photo) {
+        selected = if (photo.id in selected) selected - photo.id else selected + photo.id
+    }
+
+    BackHandler(enabled = selecting) { selected = emptySet() }
+
+    if (picking) {
+        AlertDialog(
+            onDismissRequest = { picking = false },
+            title = { Text("어느 폴더에 넣을까요?") },
+            text = {
+                Column {
+                    folders.filter { it != group.customFolder }.forEach { name ->
+                        TextButton(onClick = {
+                            onAddToFolder(name, selected)
+                            selected = emptySet()
+                            picking = false
+                        }) { Text(CUSTOM_PREFIX + name) }
+                    }
+                    TextButton(onClick = { picking = false; naming = true }) { Text("＋ 새 폴더 만들어 넣기") }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { picking = false }) { Text("취소") } },
+        )
+    }
+    if (naming) {
+        TextInputDialog(
+            title = "새 폴더",
+            placeholder = "예: 아기 성장, 가족여행",
+            onConfirm = { name ->
+                onAddToFolder(name, selected)
+                selected = emptySet()
+                naming = false
+            },
+            onDismiss = { naming = false },
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(group.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("${group.photos.size}장", style = MaterialTheme.typography.bodySmall)
+                    if (selecting) {
+                        Text("${selected.size}개 선택")
+                    } else {
+                        Column {
+                            Text(group.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("${group.photos.size}장", style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
+                    IconButton(onClick = { if (selecting) selected = emptySet() else onBack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = if (selecting) "선택 취소" else "뒤로")
                     }
                 },
                 actions = {
-                    if (group.centerLat != null && group.centerLng != null) {
+                    if (selecting) {
+                        TextButton(onClick = { selected = group.photos.map { it.id }.toSet() }) { Text("전체") }
+                        if (group.customFolder != null) {
+                            TextButton(onClick = {
+                                onRemoveFromFolder(selected)
+                                selected = emptySet()
+                            }) { Text("빼기") }
+                        }
+                        TextButton(onClick = { picking = true }) { Text("폴더에 넣기") }
+                    } else if (group.centerLat != null && group.centerLng != null) {
                         IconButton(onClick = { openMap(context, group.centerLat, group.centerLng, group.name) }) {
                             Icon(Icons.Default.Place, contentDescription = "지도에서 보기")
                         }
@@ -850,7 +997,30 @@ private fun GroupScreen(group: PhotoGroup, onBack: () -> Unit, onPhoto: (Photo) 
                     )
                 }
                 items(photos, key = { it.id }) { photo ->
-                    Thumbnail(photo, Modifier.aspectRatio(1f).clickable { onPhoto(photo) })
+                    val isSelected = photo.id in selected
+                    Box(
+                        Modifier.aspectRatio(1f).combinedClickable(
+                            onClick = { if (selecting) toggle(photo) else onPhoto(photo) },
+                            onLongClick = { toggle(photo) },
+                        )
+                    ) {
+                        Thumbnail(photo, Modifier.fillMaxSize())
+                        if (isSelected) {
+                            Box(
+                                Modifier.fillMaxSize()
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                                    .border(3.dp, MaterialTheme.colorScheme.primary)
+                            )
+                            Text(
+                                "✓",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.align(Alignment.TopEnd).padding(6.dp)
+                                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                    .padding(horizontal = 6.dp),
+                            )
+                        }
+                    }
                 }
             }
         }

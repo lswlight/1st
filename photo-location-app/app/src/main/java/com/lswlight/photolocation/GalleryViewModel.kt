@@ -27,6 +27,8 @@ data class PhotoGroup(
     val centerLng: Double?,
     /** 하위 지역 (경상북도 아래 포항시, 김천시 …). 비어 있으면 바로 월 폴더로 들어간다. */
     val subgroups: List<PhotoGroup> = emptyList(),
+    /** 사용자가 만든 '내 폴더'이면 그 폴더 이름(⭐ 없이), 아니면 null */
+    val customFolder: String? = null,
 ) {
     /** 월별 하위 폴더: (2026년 10월, 사진들) 최신 달부터 */
     val months: List<Pair<String, List<Photo>>> by lazy {
@@ -42,6 +44,8 @@ data class UiState(
     val totalPhotos: Int = 0,
     val locatedPhotos: Int = 0,
     val totalVideos: Int = 0,
+    /** 내 폴더 이름 목록 (폴더에 넣기 창에서 쓴다) */
+    val customFolders: List<String> = emptyList(),
     val geocoderMissing: Boolean = false,
     val loaded: Boolean = false,
     /** 집/회사 위치 설명. null 이면 찾지 못함 */
@@ -79,6 +83,7 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
     private var exportTotal = 0
     private val namer = LocationNamer(app)
     private val anchorStore = AnchorStore(app)
+    private val customStore = CustomFolderStore(app)
     private var home: Anchor? = null
     private var work: Anchor? = null
 
@@ -235,6 +240,29 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---- 내 폴더 ----
+
+    /** 새 폴더를 만든다. 이름이 비었거나 이미 있으면 false */
+    fun createFolder(name: String): Boolean = customStore.create(name).also { if (it) refreshGroups() }
+
+    fun deleteFolder(name: String) {
+        customStore.delete(name)
+        refreshGroups()
+    }
+
+    /** 사진을 내 폴더에 넣는다. 폴더가 없으면 새로 만든다. */
+    fun addToFolder(name: String, ids: Collection<Long>) {
+        if (name.trim() !in customStore.folderNames) customStore.create(name)
+        customStore.add(name.trim(), ids)
+        refreshGroups()
+    }
+
+    /** 내 폴더에서 빼서 다시 자동 분류로 돌려보낸다. */
+    fun removeFromFolder(ids: Collection<Long>) {
+        customStore.remove(ids)
+        refreshGroups()
+    }
+
     /** 직접 지정한 집/회사를 지우고 자동 감지로 되돌린다. */
     fun resetAnchors() {
         anchorStore.clear()
@@ -249,6 +277,7 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
         _state.update {
             it.copy(
                 groups = buildGroups(),
+                customFolders = customStore.folderNames,
                 homeText = home?.let { a -> describe(a) },
                 workText = listOfNotNull(
                     workArea?.let { a -> "$a 전체 (직접 지정)" },
@@ -270,10 +299,13 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
      */
     private fun buildGroups(): List<PhotoGroup> {
         val workArea = anchorStore.workArea
+        val assigned = customStore.assigned
         val byName = LinkedHashMap<String, MutableList<Photo>>()
         // 지역 그룹별 하위 지역(시·군) 사진. 광역시처럼 하위가 없으면 키가 null
         val subsByRegion = HashMap<String, LinkedHashMap<String?, MutableList<Photo>>>()
+        // 내 폴더에 넣은 사진은 자동 분류에서 뺀다.
         for (photo in cameraPhotos) {
+            if (photo.id in assigned) continue
             val name = when {
                 !photo.hasLocation -> NO_LOCATION
                 else -> when (LifeClassifier.kindOf(photo, home, work, workArea, ::areaOf)) {
@@ -299,7 +331,15 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
             .map { (name, list) -> toGroup(name, list, subgroups(subsByRegion[name])) }
             .sortedByDescending { it.photos.size }
         fun fixed(names: List<String>) = names.mapNotNull { n -> byName[n]?.let { toGroup(n, it) } }
-        return fixed(fixedTop) + regions + fixed(fixedBottom) + receivedGroups()
+        return customGroups() + fixed(fixedTop) + regions + fixed(fixedBottom) + receivedGroups()
+    }
+
+    /** 내 폴더. 사진이 없는 폴더도 목록에 보인다. */
+    private fun customGroups(): List<PhotoGroup> {
+        val byFolder = photos.filter { it.id in customStore.assigned }.groupBy { customStore.assigned.getValue(it.id) }
+        return customStore.folderNames.map { name ->
+            toGroup(CUSTOM_PREFIX + name, byFolder[name].orEmpty()).copy(customFolder = name)
+        }
     }
 
     /** 시·군 하위 그룹. 하위 이름이 하나도 없으면(광역시) 빈 목록 */
@@ -311,7 +351,7 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 카카오톡·스크린샷 등 받은 사진은 위치와 상관없이 출처(앱)별로 묶는다. */
     private fun receivedGroups(): List<PhotoGroup> {
-        val bySource = photos.filter { it.source != null }.groupBy { it.source!! }
+        val bySource = photos.filter { it.source != null && it.id !in customStore.assigned }.groupBy { it.source!! }
         val known = RECEIVED_ORDER.mapNotNull { name -> bySource[name]?.let { toGroup(name, it) } }
         val others = bySource.filterKeys { it !in RECEIVED_ORDER }
             .map { (name, list) -> toGroup(name, list) }
