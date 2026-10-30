@@ -10,6 +10,8 @@ import kotlin.math.floor
 data class Place(val country: String, val province: String, val district: String)
 
 enum class GroupLevel(val label: String) {
+    /** 집 / 회사 / 동네 / 여행 (LifeClassifier) */
+    LIFE("생활권"),
     COUNTRY("나라"),
     PROVINCE("시·도"),
     DISTRICT("시·군·구"),
@@ -18,7 +20,7 @@ enum class GroupLevel(val label: String) {
 fun Place.nameAt(level: GroupLevel): String = when (level) {
     GroupLevel.COUNTRY -> country
     GroupLevel.PROVINCE -> province
-    GroupLevel.DISTRICT -> district
+    GroupLevel.LIFE, GroupLevel.DISTRICT -> district
 }
 
 /**

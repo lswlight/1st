@@ -17,6 +17,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -54,6 +56,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -168,7 +171,18 @@ private fun App(vm: GalleryViewModel = viewModel()) {
     when {
         photo != null -> {
             BackHandler { openPhotoId = null }
-            PhotoScreen(photo, onBack = { openPhotoId = null })
+            PhotoScreen(
+                photo,
+                onBack = { openPhotoId = null },
+                onSetHome = {
+                    vm.setHome(photo)
+                    Toast.makeText(context, "이 위치를 집으로 설정했습니다.", Toast.LENGTH_SHORT).show()
+                },
+                onSetWork = {
+                    vm.setWork(photo)
+                    Toast.makeText(context, "이 위치를 회사로 설정했습니다.", Toast.LENGTH_SHORT).show()
+                },
+            )
         }
         group != null -> {
             BackHandler { openGroup = null }
@@ -179,6 +193,7 @@ private fun App(vm: GalleryViewModel = viewModel()) {
             locationPermission = context.granted(Manifest.permission.ACCESS_MEDIA_LOCATION),
             onRefresh = vm::scan,
             onLevel = vm::setLevel,
+            onResetAnchors = vm::resetAnchors,
             onGroup = { openGroup = it.name },
         )
     }
@@ -212,6 +227,7 @@ private fun GroupListScreen(
     locationPermission: Boolean,
     onRefresh: () -> Unit,
     onLevel: (GroupLevel) -> Unit,
+    onResetAnchors: () -> Unit,
     onGroup: (PhotoGroup) -> Unit,
 ) {
     Scaffold(
@@ -228,7 +244,7 @@ private fun GroupListScreen(
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             Row(
-                modifier = Modifier.padding(horizontal = 16.dp),
+                modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 GroupLevel.entries.forEach { level ->
@@ -261,6 +277,9 @@ private fun GroupListScreen(
             if (!locationPermission) {
                 Notice("사진 위치 접근 권한이 없어 GPS 좌표가 가려집니다. 설정 › 앱 › 권한에서 허용해 주세요.")
             }
+            if (state.loaded && state.level == GroupLevel.LIFE) {
+                AnchorCard(state, onResetAnchors)
+            }
             if (state.geocoderMissing) {
                 Notice("이 기기에서 주소 변환(Geocoder)을 지원하지 않아 지역 이름을 표시할 수 없습니다.")
             }
@@ -270,6 +289,25 @@ private fun GroupListScreen(
                     GroupRow(group, onClick = { onGroup(group) })
                     HorizontalDivider()
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AnchorCard(state: UiState, onReset: () -> Unit) {
+    Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+        Column(Modifier.padding(12.dp)) {
+            Text("집: ${state.homeText ?: "찾지 못함"}", style = MaterialTheme.typography.bodySmall)
+            Text("회사: ${state.workText ?: "찾지 못함"}", style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "틀렸다면 그 장소에서 찍은 사진을 열고 '집으로 설정' / '회사로 설정'을 누르세요.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (state.anchorsManual) {
+                TextButton(onClick = onReset) { Text("자동 감지로 되돌리기") }
             }
         }
     }
@@ -371,7 +409,12 @@ private fun GroupScreen(group: PhotoGroup, onBack: () -> Unit, onPhoto: (Photo) 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PhotoScreen(photo: Photo, onBack: () -> Unit) {
+private fun PhotoScreen(
+    photo: Photo,
+    onBack: () -> Unit,
+    onSetHome: () -> Unit,
+    onSetWork: () -> Unit,
+) {
     val context = LocalContext.current
     val dateText = remember(photo.dateTaken) {
         SimpleDateFormat("yyyy년 M월 d일 HH:mm", Locale.KOREAN).format(Date(photo.dateTaken))
@@ -414,6 +457,12 @@ private fun PhotoScreen(photo: Photo, onBack: () -> Unit) {
                     }
                     OutlinedButton(onClick = { openInGallery(context, photo.uri) }) {
                         Text("갤러리 앱에서 열기")
+                    }
+                }
+                if (photo.hasLocation) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = onSetHome) { Text("🏠 집으로 설정") }
+                        TextButton(onClick = onSetWork) { Text("🏢 회사로 설정") }
                     }
                 }
             }
