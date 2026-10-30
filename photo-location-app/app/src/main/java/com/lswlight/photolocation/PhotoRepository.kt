@@ -15,8 +15,13 @@ data class Photo(
     val dateTaken: Long,
     val lat: Double?,
     val lng: Double?,
+    /** 저장 폴더 (예: DCIM/Camera/) */
+    val folder: String,
 ) {
     val hasLocation: Boolean get() = lat != null && lng != null
+
+    /** 받은 사진이면 출처 그룹 이름(💬 카카오톡 등), 카메라로 찍은 사진이면 null */
+    val source: String? = receivedGroupName(folder)
 }
 
 /**
@@ -40,7 +45,14 @@ class PhotoRepository(private val context: Context) {
             android.Manifest.permission.ACCESS_MEDIA_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
 
-        data class Row(val id: Long, val volume: String, val name: String, val dateTaken: Long, val dateModified: Long)
+        data class Row(
+            val id: Long,
+            val volume: String,
+            val name: String,
+            val folder: String,
+            val dateTaken: Long,
+            val dateModified: Long,
+        )
 
         val rows = mutableListOf<Row>()
         val projection = arrayOf(
@@ -48,6 +60,7 @@ class PhotoRepository(private val context: Context) {
             MediaStore.Images.Media.DISPLAY_NAME,
             MediaStore.Images.Media.DATE_TAKEN,
             MediaStore.Images.Media.DATE_MODIFIED,
+            MediaStore.Images.Media.RELATIVE_PATH,
         )
         // 내장 메모리와 SD 카드를 각각 조회한다.
         val log = mutableListOf<String>()
@@ -77,12 +90,14 @@ class PhotoRepository(private val context: Context) {
                     val nameCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
                     val takenCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
                     val modCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_MODIFIED)
+                    val folderCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.RELATIVE_PATH)
                     while (c.moveToNext()) {
                         val dateModified = c.getLong(modCol)
                         rows += Row(
                             id = c.getLong(idCol),
                             volume = volume,
                             name = c.getString(nameCol) ?: "",
+                            folder = c.getString(folderCol) ?: "",
                             // DATE_TAKEN 이 없는 사진은 수정 시각(초 단위)으로 대신한다.
                             dateTaken = c.getLong(takenCol).takeIf { it > 0 } ?: (dateModified * 1000),
                             dateModified = dateModified,
@@ -106,7 +121,7 @@ class PhotoRepository(private val context: Context) {
                 CachedExif(row.dateModified, lat, lng)
             }
             newCache[row.id] = exif
-            Photo(row.id, uri, row.name, row.dateTaken, exif.lat, exif.lng)
+            Photo(row.id, uri, row.name, row.dateTaken, exif.lat, exif.lng, row.folder)
         }
         onProgress(rows.size, rows.size)
         // 위치 권한이 없을 때 읽은 값은 좌표가 가려져 있으므로 캐시에 남기지 않는다.

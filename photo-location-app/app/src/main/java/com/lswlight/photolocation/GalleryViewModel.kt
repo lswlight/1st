@@ -26,6 +26,8 @@ data class PhotoGroup(
     /** 지도 열기용 대표 좌표 (위치 없는 그룹은 null) */
     val centerLat: Double?,
     val centerLng: Double?,
+    /** 내보낼 때 월별 하위 폴더로 나눌지. 여행처럼 기간이 짧은 그룹은 나누지 않는다. */
+    val monthly: Boolean = true,
 )
 
 data class Progress(val message: String, val done: Int, val total: Int)
@@ -85,6 +87,8 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     private var photos: List<Photo> = emptyList()
+    /** 내가 카메라로 찍은 사진. 위치 분류(집/회사/여행, 지역)는 이것만 쓴다. */
+    private var cameraPhotos: List<Photo> = emptyList()
     private var scanJob: Job? = null
     private var pendingJob: Job? = null
 
@@ -139,8 +143,9 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
                 photos = repository.loadPhotos { done, total ->
                     _state.update { it.copy(progress = Progress("사진 위치 읽는 중", done, total)) }
                 }
+                cameraPhotos = photos.filter { it.source == null }
                 if (namer.isAvailable) {
-                    val keys = photos.filter { it.hasLocation }
+                    val keys = cameraPhotos.filter { it.hasLocation }
                         .map { namer.cellKey(it.lat!!, it.lng!!) }
                         .toSet()
                     namer.resolve(keys) { done, total ->
@@ -231,10 +236,10 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun refreshGroups() {
-        home = anchorStore.get("home") ?: LifeClassifier.detectHome(photos)
+        home = anchorStore.get("home") ?: LifeClassifier.detectHome(cameraPhotos)
         val workArea = anchorStore.workArea
         // 회사 지역을 직접 지정했으면 자동 감지한 회사 지점은 쓰지 않는다.
-        work = anchorStore.get("work") ?: if (workArea == null) LifeClassifier.detectWork(photos, home) else null
+        work = anchorStore.get("work") ?: if (workArea == null) LifeClassifier.detectWork(cameraPhotos, home) else null
         _state.update {
             it.copy(
                 groups = buildGroups(it.level),
@@ -254,9 +259,9 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun buildGroups(level: GroupLevel): List<PhotoGroup> {
-        if (level == GroupLevel.LIFE) return buildLifeGroups()
+        if (level == GroupLevel.LIFE) return buildLifeGroups() + receivedGroups()
         val byName = LinkedHashMap<String, MutableList<Photo>>()
-        for (photo in photos) {
+        for (photo in cameraPhotos) {
             val name = if (!photo.hasLocation) {
                 NO_LOCATION
             } else {
@@ -270,11 +275,21 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
         val rest = listOf(UNRESOLVED, NO_LOCATION).mapNotNull { name ->
             byName[name]?.let { toGroup(name, it) }
         }
-        return placed + rest
+        return placed + rest + receivedGroups()
+    }
+
+    /** 카카오톡·스크린샷 등 받은 사진은 위치와 상관없이 출처별로 묶는다. */
+    private fun receivedGroups(): List<PhotoGroup> {
+        val bySource = photos.filter { it.source != null }.groupBy { it.source!! }
+        val known = RECEIVED_ORDER.mapNotNull { name -> bySource[name]?.let { toGroup(name, it) } }
+        val others = bySource.filterKeys { it !in RECEIVED_ORDER }
+            .map { (name, list) -> toGroup(name, list) }
+            .sortedByDescending { it.photos.size }
+        return known + others
     }
 
     private fun buildLifeGroups(): List<PhotoGroup> {
-        val byKind = photos.filter { it.hasLocation }
+        val byKind = cameraPhotos.filter { it.hasLocation }
             .groupBy { LifeClassifier.kindOf(it, home, work, anchorStore.workArea, ::areaOf) }
 
         val trips = mutableListOf<PhotoGroup>()
@@ -289,7 +304,7 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
             var name = tripName(trip)
             var n = 2
             while (!usedNames.add(name)) name = "${tripName(trip)} ($n)".also { n++ }
-            trips += toGroup(name, trip)
+            trips += toGroup(name, trip, monthly = false)
         }
 
         val fixed = listOf(
@@ -302,7 +317,7 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
             outings.takeIf { it.isNotEmpty() }?.let { list ->
                 toGroup(OUTING, list.sortedByDescending { it.dateTaken })
             },
-            photos.filter { !it.hasLocation }.takeIf { it.isNotEmpty() }?.let { toGroup(NO_LOCATION, it) },
+            cameraPhotos.filter { !it.hasLocation }.takeIf { it.isNotEmpty() }?.let { toGroup(NO_LOCATION, it) },
         )
         return fixed + trips + rest
     }
@@ -319,11 +334,12 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
         return "✈️ $month $main$others (${LifeClassifier.dayCount(trip)}일)"
     }
 
-    private fun toGroup(name: String, list: List<Photo>): PhotoGroup {
+    private fun toGroup(name: String, list: List<Photo>, monthly: Boolean = true): PhotoGroup {
         val located = list.filter { it.hasLocation }
         return PhotoGroup(
             name = name,
             photos = list,
+            monthly = monthly,
             centerLat = located.takeIf { it.isNotEmpty() }?.map { it.lat!! }?.average(),
             centerLng = located.takeIf { it.isNotEmpty() }?.map { it.lng!! }?.average(),
         )
@@ -341,12 +357,13 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
             var failed = 0
             var done = 0
             withContext(Dispatchers.IO) {
+                val existing = HashMap<String, Set<String>>()
                 for (group in groups) {
-                    val folder = exportFolder(group.name)
-                    val existing = exporter.existingNames(folder)
                     for (photo in group.photos) {
+                        val folder = exportFolder(group, photo)
+                        val names = existing.getOrPut(folder) { exporter.existingNames(folder) }
                         when {
-                            photo.name in existing -> skipped++
+                            photo.name in names -> skipped++
                             exporter.copy(photo, folder) -> copied++
                             else -> failed++
                         }
@@ -370,7 +387,7 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
             _state.update { it.copy(exportMessage = "사진 이동은 Android 11 이상에서만 됩니다. '복사'를 이용해 주세요.") }
             return
         }
-        val items = groups.flatMap { g -> exportFolder(g.name).let { f -> g.photos.map { it to f } } }
+        val items = groups.flatMap { g -> g.photos.map { it to exportFolder(g, it) } }
         moveQueue.clear()
         moveQueue.addAll(items.chunked(REQUEST_CHUNK))
         exportDone = 0

@@ -10,6 +10,14 @@ import android.provider.MediaStore
 /** 내보내기 폴더. PC 에서는 '내장 메모리/Pictures/사진위치분류' 로 보인다. */
 const val EXPORT_ROOT = "Pictures/사진위치분류/"
 
+private val MONTH_FORMAT = java.text.SimpleDateFormat("yyyy년 MM월", java.util.Locale.KOREAN)
+
+/** 사진을 넣을 폴더. 월별로 나누는 그룹이면 '그룹/2026년 10월/' 처럼 하위 폴더를 만든다. */
+fun exportFolder(group: PhotoGroup, photo: Photo): String {
+    val base = exportFolder(group.name)
+    return if (group.monthly) base + MONTH_FORMAT.format(java.util.Date(photo.dateTaken)) + "/" else base
+}
+
 /** 그룹 이름을 윈도우에서도 쓸 수 있는 폴더 이름으로 바꾼다. */
 fun exportFolder(groupName: String): String {
     val safe = groupName.replace(Regex("""[\\/:*?"<>|]"""), "_").trim().trimEnd('.')
