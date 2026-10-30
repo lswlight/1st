@@ -61,9 +61,14 @@ object CardMessageParser {
     private val MINUS_AMOUNT = Regex("""[-−－]\s*\d[\d,]*\s*원""")
     private val MINUS_BEFORE = Regex("""[-−－]\s*$""")
 
+    private val POINT_SUFFIX = Regex("""^[^\d]{0,8}(적립|포인트|마일리지)""")
+
     private val NOT_PAYMENT_PREFIX = Regex("""(누적|잔액|한도|포인트|적립|캐시백|할인|청구)[^\n\d]{0,6}$""")
 
     // 결제가 아닌 안내 문자 (거절, 청구서, 광고 등)
+    // 적립 안내만 있는 알림 (예: 토스 "페이스페이 · 최대 7% 적립 … 4,360원 적립됐어요")
+    private val POINT_NOTICE = Regex("""적립\s*(됐|되었|완료|예정|해\s*드렸|받았|했어요)""")
+
     private val EXCLUDE = Regex("""승인\s*거절|거절|결제\s*예정|결제\s*대금|청구\s*금액|명세서|연체|이용\s*대금|출금\s*예정|\(광고\)|인증번호|\[입금]|입금되었습니다""")
     // 출금: 은행 앱의 체크카드·계좌 출금 알림 (예: MG새마을금고 "[출금] 18,500원 ... 양천돈까스")
     private val PAYMENT_WORD = Regex("""승인|결제|사용|일시불|할부|취소|출금""")
@@ -93,6 +98,8 @@ object CardMessageParser {
     ): ParsedPayment? {
         val body = text.replace("\r", "").lines().joinToString("\n") { it.trim() }.trim()
         if (body.isEmpty() || EXCLUDE.containsMatchIn(body)) return null
+        // 승인 문구 없이 적립 안내만 있으면 기록하지 않는다
+        if (POINT_NOTICE.containsMatchIn(body) && !body.contains("승인")) return null
         // 은행 계좌 출금 알림은 기록하지 않는다. 체크카드 결제는 은행이 따로 보내는 "체크카드 … 승인" 알림으로 기록되고,
         // 카드 승인이 없는 출금은 계좌 이체·송금·ATM 출금이기 때문. 자동이체(통신비·관리비 등)만 지출로 남긴다
         if (body.contains("출금") && !CARD_APPROVAL.containsMatchIn(body) && !AUTO_DEBIT.containsMatchIn(body)) return null
@@ -148,6 +155,9 @@ object CardMessageParser {
             val minus = MINUS_BEFORE.containsMatchIn(before)
             val benefitWord = BENEFIT_PREFIX.containsMatchIn(before)
             if (NOT_PAYMENT_PREFIX.containsMatchIn(before) && !(minus && benefitWord)) continue
+            // "4,360원 적립", "500원 포인트 적립 예정" 처럼 금액 뒤에 적립이 붙으면 쓴 돈이 아니다
+            val after = body.substring(m.range.last + 1).substringBefore('\n')
+            if (POINT_SUFFIX.containsMatchIn(after)) continue
             val value = m.groupValues[1].replace(",", "").toLongOrNull() ?: continue
             if (value > 0) return value to minus
         }

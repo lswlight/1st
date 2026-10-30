@@ -312,6 +312,16 @@ class CardMessageParserTest {
     }
 
     @Test
+    fun pointRewardNoticesAreIgnored() {
+        // 토스 적립 알림 (결제는 카드사 알림으로 따로 기록된다)
+        assertNull(parse("토스\n페이스페이 · 최대 7% 적립\n기찬낙지에서 결제하고 4,360원 적립됐어요", trusted = true))
+        assertNull(parse("페이스페이 · 최대 7% 적립\n4,360원 적립", trusted = true))
+        // 결제 문자 안의 적립 안내는 무시하고 결제 금액만 읽는다
+        val p = parse("[하나카드] 승인 109,000원 일시불 10/30 20:13 기찬낙지 (포인트 1,090원 적립 예정)")!!
+        assertEquals(109000L, p.amount)
+    }
+
+    @Test
     fun ignoresNonPaymentMessages() {
         assertNull(parse("신한카드(1234) 승인거절 홍*동 12,500원 한도초과"))
         assertNull(parse("[신한카드] 11월 결제예정금액은 1,234,567원입니다"))

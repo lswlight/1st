@@ -103,6 +103,7 @@ jobs:
             adb pull /data/local/tmp/stats-calendar.png stats-calendar.png || true
             adb pull /data/local/tmp/stats-graph.png stats-graph.png || true
             adb pull /data/local/tmp/stats-main.png stats-main.png || true
+            adb pull /data/local/tmp/stats-cards.png stats-cards.png || true
 
       - name: 달력·그래프 화면 캡처 업로드
         if: always()
@@ -118,4 +119,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          ls stats-*.png && gh release upload moneybook-latest stats-main.png stats-calendar.png stats-graph.png --clobber --repo "$GITHUB_REPOSITORY"
+          ls stats-*.png && gh release upload moneybook-latest stats-main.png stats-calendar.png stats-graph.png stats-cards.png --clobber --repo "$GITHUB_REPOSITORY"

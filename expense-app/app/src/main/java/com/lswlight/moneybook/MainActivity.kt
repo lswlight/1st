@@ -100,8 +100,9 @@ class MainActivity : Activity() {
         root.addView(permissionBanner, margins(top = 8))
 
         // 달력·그래프 화면
-        root.addView(button("📅 달력 · 📊 그래프로 보기") {
-            startActivity(Intent(this, StatsActivity::class.java).putExtra(StatsActivity.EXTRA_MONTH, month.toString()))
+        root.addView(horizontal().apply {
+            addView(button("📅 달력 · 📊 그래프") { openStats(StatsActivity.TAB_CALENDAR) }, weight())
+            addView(button("💳 카드별 지출") { openStats(StatsActivity.TAB_CARDS) }, weight())
         }, margins(top = 8))
 
         // 입력 버튼
@@ -324,6 +325,12 @@ class MainActivity : Activity() {
             .setPositiveButton("닫기", null)
             .setNeutralButton("지우기") { _, _ -> DetectLog.clear(this) }
             .show()
+    }
+
+    private fun openStats(tab: Int) {
+        startActivity(Intent(this, StatsActivity::class.java)
+            .putExtra(StatsActivity.EXTRA_MONTH, month.toString())
+            .putExtra(StatsActivity.EXTRA_TAB, tab))
     }
 
     /** 자동 기록에서 뺄 상대 이름·단어 목록 편집. */

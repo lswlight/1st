@@ -32,19 +32,20 @@ class StatsActivity : Activity() {
 
     private lateinit var db: LedgerDb
     private var month: YearMonth = YearMonth.now()
-    private var showGraph = false
+    private var tab = TAB_CALENDAR
 
     private lateinit var monthLabel: TextView
     private lateinit var tabCalendar: Button
     private lateinit var tabGraph: Button
+    private lateinit var tabCards: Button
     private lateinit var content: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         db = LedgerDb.get(this)
         intent.getStringExtra(EXTRA_MONTH)?.let { month = YearMonth.parse(it) }
-        showGraph = intent.getBooleanExtra(EXTRA_GRAPH, false)
-        title = "달력 · 그래프"
+        tab = intent.getIntExtra(EXTRA_TAB, if (intent.getBooleanExtra(EXTRA_GRAPH, false)) TAB_GRAPH else TAB_CALENDAR)
+        title = "달력 · 그래프 · 카드별"
         // 제목 줄 왼쪽 ← 버튼으로 메인 화면으로 돌아간다
         actionBar?.setDisplayHomeAsUpEnabled(true)
         setContentView(buildLayout())
@@ -73,10 +74,12 @@ class StatsActivity : Activity() {
             addView(button("▶") { month = month.plusMonths(1); refresh() })
         })
         root.addView(horizontal().apply {
-            tabCalendar = button("달력") { showGraph = false; refresh() }
-            tabGraph = button("그래프") { showGraph = true; refresh() }
+            tabCalendar = button("달력") { tab = TAB_CALENDAR; refresh() }
+            tabGraph = button("그래프") { tab = TAB_GRAPH; refresh() }
+            tabCards = button("카드별") { tab = TAB_CARDS; refresh() }
             addView(tabCalendar, weight())
             addView(tabGraph, weight())
+            addView(tabCards, weight())
         }, margins(top = 4))
         content = vertical()
         root.addView(content, margins(top = 8))
@@ -89,8 +92,9 @@ class StatsActivity : Activity() {
 
     private fun refresh() {
         monthLabel.text = "${month.year}년 ${month.monthValue}월"
-        tabCalendar.alpha = if (showGraph) 0.5f else 1f
-        tabGraph.alpha = if (showGraph) 1f else 0.5f
+        tabCalendar.alpha = if (tab == TAB_CALENDAR) 1f else 0.5f
+        tabGraph.alpha = if (tab == TAB_GRAPH) 1f else 0.5f
+        tabCards.alpha = if (tab == TAB_CARDS) 1f else 0.5f
 
         val entries = db.month(month)
         val expense = entries.filter { it.kind == Kind.EXPENSE }
@@ -98,7 +102,85 @@ class StatsActivity : Activity() {
 
         content.removeAllViews()
         content.addView(summary(income.sumOf { it.amount }, expense.sumOf { it.amount }, expense))
-        if (showGraph) showGraphs(expense) else showCalendar(entries)
+        when (tab) {
+            TAB_GRAPH -> showGraphs(expense)
+            TAB_CARDS -> showCards(entries)
+            else -> showCalendar(entries)
+        }
+    }
+
+    // ---------------------------------------------------------------- 카드별
+
+    /**
+     * 카드(결제 수단)별 실제 지출 = 결제 합계 - 승인 취소 - 카드 혜택(할인·캐시백).
+     * 카드를 누르면 그 카드의 이번 달 내역이 펼쳐진다.
+     */
+    private fun showCards(entries: List<Entry>) {
+        val byCard = entries.filter { it.kind == Kind.EXPENSE || it.memo.startsWith("카드 혜택") }
+            .groupBy { it.card.ifEmpty { "카드 정보 없음 (직접 입력)" } }
+        if (byCard.isEmpty()) {
+            content.addView(text("이번 달 카드 사용 내역이 없어요.", 14f, Color.GRAY).apply { setPadding(0, dp(16), 0, 0) })
+            return
+        }
+        data class CardSum(val name: String, val paid: Long, val count: Int, val canceled: Long, val benefit: Long, val list: List<Entry>) {
+            val real get() = paid - canceled - benefit
+        }
+        val sums = byCard.map { (name, list) ->
+            val pays = list.filter { it.kind == Kind.EXPENSE && it.amount > 0 }
+            CardSum(
+                name = name,
+                paid = pays.sumOf { it.amount },
+                count = pays.size,
+                canceled = list.filter { it.kind == Kind.EXPENSE && it.amount < 0 }.sumOf { -it.amount },
+                benefit = list.filter { it.kind == Kind.INCOME }.sumOf { it.amount },
+                list = list.sortedByDescending { it.time },
+            )
+        }.sortedByDescending { it.real }
+        val total = sums.sumOf { it.real }
+        content.addView(text("카드별 실제 지출 합계  ${MainActivity.won(total)}", 16f, bold = true).apply { setPadding(0, dp(16), 0, dp(6)) })
+        content.addView(text("실제 지출 = 결제 - 취소 - 혜택(할인·캐시백). 카드를 누르면 내역이 펼쳐져요.", 12f, Color.GRAY))
+
+        for (c in sums) {
+            val detail = vertical().apply { visibility = View.GONE; setPadding(0, dp(6), 0, 0) }
+            for (e in c.list) {
+                detail.addView(horizontal().apply {
+                    setPadding(0, dp(4), 0, dp(4))
+                    addView(vertical().apply {
+                        addView(text(e.memo, 14f).apply { maxLines = 1 })
+                        addView(text(e.time.format(DATE_TIME_SHORT), 11f, Color.GRAY))
+                    }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                    val (sign, color) = when {
+                        e.kind == Kind.INCOME -> "+" to INCOME_COLOR
+                        e.amount < 0 -> "취소 " to Color.GRAY
+                        else -> "-" to EXPENSE_COLOR
+                    }
+                    addView(text(sign + MainActivity.won(Math.abs(e.amount)), 14f, color, bold = true))
+                })
+            }
+            val card = vertical().apply {
+                background = rounded(Color.parseColor("#F2F4F7"), 12)
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+                addView(horizontal().apply {
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(text("💳 ${c.name}", 16f, bold = true), LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                    addView(text(MainActivity.won(c.real), 17f, EXPENSE_COLOR, bold = true))
+                })
+                val parts = mutableListOf("결제 ${c.count}건 ${MainActivity.won(c.paid)}")
+                if (c.canceled > 0) parts += "취소 -${MainActivity.won(c.canceled)}"
+                if (c.benefit > 0) parts += "혜택 -${MainActivity.won(c.benefit)}"
+                addView(text(parts.joinToString(" · "), 12f, Color.DKGRAY).apply { setPadding(0, dp(4), 0, 0) })
+                // 전체 대비 비중 막대
+                val ratio = if (total > 0) (c.real.coerceAtLeast(0).toFloat() / total) else 0f
+                addView(horizontal().apply {
+                    addView(View(this@StatsActivity).apply { background = rounded(EXPENSE_COLOR, 4) },
+                        LinearLayout.LayoutParams(0, dp(6), ratio + 0.0001f))
+                    addView(View(this@StatsActivity), LinearLayout.LayoutParams(0, dp(6), 1f - ratio + 0.0001f))
+                }, margins(top = 6))
+                addView(detail)
+                setOnClickListener { detail.visibility = if (detail.visibility == View.GONE) View.VISIBLE else View.GONE }
+            }
+            content.addView(card, margins(top = 10))
+        }
     }
 
     // ---------------------------------------------------------------- 달력
@@ -255,9 +337,14 @@ class StatsActivity : Activity() {
     companion object {
         const val EXTRA_MONTH = "month"
         const val EXTRA_GRAPH = "graph"
+        const val EXTRA_TAB = "tab"
+        const val TAB_CALENDAR = 0
+        const val TAB_GRAPH = 1
+        const val TAB_CARDS = 2
         val INCOME_COLOR = Color.parseColor("#1E6FD9")
         val EXPENSE_COLOR = Color.parseColor("#D93025")
         private val TIME = DateTimeFormatter.ofPattern("HH:mm")
+        private val DATE_TIME_SHORT = DateTimeFormatter.ofPattern("M/d HH:mm")
         private val DAY_TITLE = DateTimeFormatter.ofPattern("M월 d일 (E)", Locale.KOREAN)
 
         /** 달력 칸처럼 좁은 곳용 금액 표기: 12,500 → 1.3만, 1,234,000 → 123만 */
