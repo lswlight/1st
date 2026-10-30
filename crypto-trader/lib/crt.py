@@ -186,9 +186,9 @@ class Fetcher(object):
 
     def _binance(self, symbol, rng, interval):
         """바이낸스 현물 캔들. 한 번에 1,000개 (5분봉 60일이면 18번)."""
-        step = {"5m": BAR, "1h": timedelta(hours=1), "1d": timedelta(days=1)}.get(interval)
+        step = INTERVALS.get(interval)
         if not step:
-            raise CrtError("바이낸스는 5m, 1h, 1d 만 씁니다")
+            raise CrtError("바이낸스는 5m, 1h, 4h, 1d 만 씁니다")
         end_ms = int(time.time() * 1000)
         start_ms = end_ms - int(timedelta(days=range_days(rng)).total_seconds() * 1000)
         rows, cur = [], start_ms
@@ -233,10 +233,12 @@ class Fetcher(object):
             path, step = "days", timedelta(days=1)
         elif interval == "1h":
             path, step = "minutes/60", timedelta(hours=1)
+        elif interval == "4h":
+            path, step = "minutes/240", timedelta(hours=4)
         elif interval == "5m":
             path, step = "minutes/5", BAR
         else:
-            raise CrtError("업비트는 5m, 1h, 1d 만 지원합니다")
+            raise CrtError("업비트는 5m, 1h, 4h, 1d 만 지원합니다")
         need = int(timedelta(days=range_days(rng)) / step) + 1
         rows, to = [], None
         while len(rows) < need:
@@ -648,7 +650,7 @@ def source_label(market="crypto", symbol=None):
     return {"binance": "바이낸스", "upbit": "업비트"}.get(crypto_source(), "Yahoo 지연 시세")
 
 
-INTERVALS = {"5m": BAR, "1h": timedelta(hours=1), "1d": timedelta(days=1)}
+INTERVALS = {"5m": BAR, "1h": timedelta(hours=1), "4h": timedelta(hours=4), "1d": timedelta(days=1)}
 
 
 def completed(bars, interval, now, market="crypto"):
