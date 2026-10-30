@@ -2,6 +2,7 @@ package com.lswlight.photolocation
 
 import android.Manifest
 import android.app.Activity
+import android.content.ClipData
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -54,6 +55,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -219,6 +221,12 @@ private fun App(vm: GalleryViewModel = viewModel()) {
     val requestLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
     ) { result -> vm.onRequestResult(result.resultCode == Activity.RESULT_OK) }
+    LaunchedEffect(state.userMessage) {
+        state.userMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            vm.clearUserMessage()
+        }
+    }
     LaunchedEffect(state.pendingRequest) {
         state.pendingRequest?.let { requestLauncher.launch(IntentSenderRequest.Builder(it.sender).build()) }
     }
@@ -261,6 +269,7 @@ private fun App(vm: GalleryViewModel = viewModel()) {
             PhotoScreen(
                 photo,
                 onBack = { openPhotoId = null },
+                onDelete = { vm.deleteItems(listOf(photo)) },
                 onSetHome = {
                     vm.setHome(photo)
                     Toast.makeText(context, "이 위치를 집으로 설정했습니다.", Toast.LENGTH_SHORT).show()
@@ -291,6 +300,7 @@ private fun App(vm: GalleryViewModel = viewModel()) {
                     vm.removeFromFolder(ids)
                     Toast.makeText(context, "${ids.size}개를 폴더에서 뺐습니다. 자동 분류로 돌아갑니다.", Toast.LENGTH_SHORT).show()
                 },
+                onDelete = vm::deleteItems,
             )
         }
         monthOwner != null -> {
@@ -897,6 +907,7 @@ private fun GroupScreen(
     folders: List<String>,
     onAddToFolder: (name: String, ids: Set<Long>) -> Unit,
     onRemoveFromFolder: (ids: Set<Long>) -> Unit,
+    onDelete: (List<Photo>) -> Unit,
 ) {
     val context = LocalContext.current
     // 사진은 최신순으로 정렬돼 있으므로 groupBy 결과도 최신 날짜부터 나온다.
@@ -964,14 +975,7 @@ private fun GroupScreen(
                 },
                 actions = {
                     if (selecting) {
-                        TextButton(onClick = { selected = group.photos.map { it.id }.toSet() }) { Text("전체") }
-                        if (group.customFolder != null) {
-                            TextButton(onClick = {
-                                onRemoveFromFolder(selected)
-                                selected = emptySet()
-                            }) { Text("빼기") }
-                        }
-                        TextButton(onClick = { picking = true }) { Text("폴더에 넣기") }
+                        TextButton(onClick = { selected = group.photos.map { it.id }.toSet() }) { Text("전체 선택") }
                     } else if (group.centerLat != null && group.centerLng != null) {
                         IconButton(onClick = { openMap(context, group.centerLat, group.centerLng, group.name) }) {
                             Icon(Icons.Default.Place, contentDescription = "지도에서 보기")
@@ -979,6 +983,30 @@ private fun GroupScreen(
                     }
                 },
             )
+        },
+        // 선택 중일 때 아래에 할 일 버튼
+        bottomBar = {
+            if (selecting) {
+                val chosen = group.photos.filter { it.id in selected }
+                Row(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    TextButton(onClick = { shareItems(context, chosen) }) { Text("공유") }
+                    TextButton(onClick = { picking = true }) { Text("폴더에 넣기") }
+                    if (group.customFolder != null) {
+                        TextButton(onClick = {
+                            onRemoveFromFolder(selected)
+                            selected = emptySet()
+                        }) { Text("빼기") }
+                    }
+                    TextButton(onClick = {
+                        onDelete(chosen)
+                        selected = emptySet()
+                    }) { Text("삭제", color = MaterialTheme.colorScheme.error) }
+                }
+            }
         },
     ) { padding ->
         LazyVerticalGrid(
@@ -1032,6 +1060,7 @@ private fun GroupScreen(
 private fun PhotoScreen(
     photo: Photo,
     onBack: () -> Unit,
+    onDelete: () -> Unit,
     onSetHome: () -> Unit,
     onSetWork: () -> Unit,
     areaName: String?,
@@ -1048,6 +1077,14 @@ private fun PhotoScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { shareItems(context, listOf(photo)) }) {
+                        Icon(Icons.Default.Share, contentDescription = "공유")
+                    }
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Default.Delete, contentDescription = "삭제")
                     }
                 },
             )
@@ -1116,6 +1153,26 @@ private fun dateRange(photos: List<Photo>): String {
 private fun openMap(context: Context, lat: Double, lng: Double, label: String) {
     val uri = Uri.parse("geo:$lat,$lng?q=$lat,$lng(${Uri.encode(label)})")
     startSafely(context, Intent(Intent.ACTION_VIEW, uri))
+}
+
+/** 카카오톡 등 다른 앱으로 보내기 (여러 개 가능) */
+private fun shareItems(context: Context, items: List<Photo>) {
+    if (items.isEmpty()) return
+    val uris = ArrayList(items.map { it.uri })
+    val intent = if (uris.size == 1) {
+        Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uris[0])
+    } else {
+        Intent(Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+    }
+    intent.type = when {
+        items.all { it.isVideo } -> "video/*"
+        items.none { it.isVideo } -> "image/*"
+        else -> "*/*"
+    }
+    // 받는 앱이 파일을 읽을 수 있도록 읽기 권한을 함께 넘긴다.
+    intent.clipData = ClipData.newRawUri(null, uris[0]).apply { uris.drop(1).forEach { addItem(ClipData.Item(it)) } }
+    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    startSafely(context, Intent.createChooser(intent, "공유"))
 }
 
 private fun openInGallery(context: Context, uri: Uri, video: Boolean) {

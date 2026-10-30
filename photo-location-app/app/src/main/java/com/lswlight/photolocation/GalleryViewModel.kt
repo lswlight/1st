@@ -59,9 +59,11 @@ data class UiState(
     val exportMessage: String? = null,
     /** 사용자 허락이 필요한 시스템 요청 (사진 이동 / 휴지통). 화면에서 띄운다. */
     val pendingRequest: PendingRequest? = null,
+    /** 화면에 잠깐 띄울 안내 (토스트) */
+    val userMessage: String? = null,
 )
 
-enum class RequestKind { MOVE, TRASH }
+enum class RequestKind { MOVE, TRASH, DELETE }
 
 data class PendingRequest(val sender: IntentSender, val kind: RequestKind)
 
@@ -79,6 +81,8 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
     private val exporter = Exporter(app)
     private val moveQueue = ArrayDeque<List<Pair<Photo, String>>>()
     private val trashQueue = ArrayDeque<List<android.net.Uri>>()
+    private val deleteQueue = ArrayDeque<List<android.net.Uri>>()
+    private var deleteTotal = 0
     private var exportDone = 0
     private var exportTotal = 0
     private val namer = LocationNamer(app)
@@ -443,6 +447,10 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
         val request = _state.value.pendingRequest ?: return
         _state.update { it.copy(pendingRequest = null) }
         if (!granted) {
+            if (request.kind == RequestKind.DELETE) {
+                deleteQueue.clear()
+                return
+            }
             moveQueue.clear()
             trashQueue.clear()
             finishExport("취소했습니다.")
@@ -464,7 +472,44 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
                 trashQueue.removeFirstOrNull()
                 requestNextTrash()
             }
+            RequestKind.DELETE -> {
+                deleteQueue.removeFirstOrNull()
+                requestNextDelete()
+            }
         }
+    }
+
+    // ---- 삭제 ----
+
+    /**
+     * 사진·동영상을 갤러리에서도 지운다. 바로 지우지 않고 시스템 휴지통으로 보내며,
+     * 시스템이 삭제 확인 창을 띄운다. (Android 11+)
+     */
+    fun deleteItems(items: Collection<Photo>) {
+        if (items.isEmpty()) return
+        if (Build.VERSION.SDK_INT < 30) {
+            _state.update { it.copy(userMessage = "삭제는 Android 11 이상에서만 됩니다.") }
+            return
+        }
+        deleteQueue.clear()
+        deleteQueue.addAll(items.map { it.uri }.chunked(REQUEST_CHUNK))
+        deleteTotal = items.size
+        requestNextDelete()
+    }
+
+    private fun requestNextDelete() {
+        val chunk = deleteQueue.firstOrNull()
+        if (chunk == null) {
+            _state.update { it.copy(userMessage = "${deleteTotal}개를 휴지통으로 옮겼습니다.") }
+            scheduleScan()
+            return
+        }
+        val intent = MediaStore.createTrashRequest(getApplication<Application>().contentResolver, chunk, true)
+        _state.update { it.copy(pendingRequest = PendingRequest(intent.intentSender, RequestKind.DELETE)) }
+    }
+
+    fun clearUserMessage() {
+        _state.update { it.copy(userMessage = null) }
     }
 
     private fun requestNextMove() {
