@@ -16,6 +16,17 @@ android {
         versionName = "1.0"
     }
 
+    // 빌드 서버마다 새 디버그 키가 만들어지면 업데이트 설치가 '패키지 충돌'로 막히므로
+    // 저장소에 둔 고정 디버그 키로 서명한다. (공개 기본 비밀번호의 디버그 전용 키)
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
