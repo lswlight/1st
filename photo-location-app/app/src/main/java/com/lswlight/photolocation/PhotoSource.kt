@@ -23,8 +23,8 @@ fun receivedGroupName(relativePath: String): String? {
     val lower = path.lowercase()
 
     // 내보내기 기능으로 옮긴 사진은 첫 하위 폴더 이름으로 원래 분류를 되살린다.
-    val exportRoot = EXPORT_ROOT.trim('/')
-    if (path.startsWith(exportRoot)) {
+    val exportRoot = listOf(EXPORT_ROOT, LEGACY_EXPORT_ROOT).map { it.trim('/') }.firstOrNull { path.startsWith(it) }
+    if (exportRoot != null) {
         val sub = path.removePrefix(exportRoot).trim('/').substringBefore('/')
         return sub.takeIf { it in RECEIVED_ORDER || it.startsWith(OTHER_APP_PREFIX) }
     }

@@ -521,7 +521,7 @@ private fun ExportScreen(
             title = { Text("원본 사진을 옮길까요?") },
             text = {
                 Text(
-                    "${count}장의 원본이 'Pictures/사진위치분류' 아래 그룹 폴더로 옮겨집니다. " +
+                    "${count}장의 원본이 'Pictures/앨범박스' 아래 그룹 폴더로 옮겨집니다. " +
                         "갤러리 앱에서는 계속 보이지만 원래 폴더(카메라 등)에서는 빠집니다.\n\n" +
                         "다음 화면에서 시스템이 수정 허락을 묻습니다."
                 )
@@ -534,7 +534,7 @@ private fun ExportScreen(
             title = { Text("분류 폴더를 비울까요?") },
             text = {
                 Text(
-                    "'Pictures/사진위치분류' 안의 사진을 모두 휴지통으로 보냅니다.\n\n" +
+                    "'Pictures/앨범박스' 안의 사진을 모두 휴지통으로 보냅니다.\n\n" +
                         "• 복사로 내보냈다면: 복사본만 지워지고 원본은 남습니다.\n" +
                         "• 이동으로 내보냈다면: 폰에서 사진이 사라집니다. PC 로 옮긴 것을 꼭 확인하세요.\n\n" +
                         "휴지통에서 30일 안에는 되살릴 수 있습니다."
@@ -561,12 +561,12 @@ private fun ExportScreen(
             item {
                 Column(Modifier.padding(16.dp)) {
                     Text(
-                        "선택한 그룹을 폰의 'Pictures/사진위치분류/그룹이름' 폴더로 정리합니다. " +
+                        "선택한 그룹을 폰의 'Pictures/앨범박스/그룹이름' 폴더로 정리합니다. " +
                             "정리된 폴더를 USB 로 PC 에 복사한 뒤, 아래 '분류 폴더 비우기'로 폰에서 지우면 됩니다.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Spacer(Modifier.height(4.dp))
-                    Text("폴더 구조: 사진위치분류 › 그룹 › 2026년 10월 › 사진", style = MaterialTheme.typography.bodySmall)
+                    Text("폴더 구조: 앨범박스 › 그룹 › 2026년 10월 › 사진", style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(12.dp))
                     ModeRow(!move, "복사", "원본은 그대로 두고 복사본을 만듭니다. 그만큼 저장 공간을 더 씁니다.") { move = false }
                     ModeRow(move, "이동", "원본 파일을 그룹 폴더로 옮깁니다. 저장 공간을 더 쓰지 않습니다.") { move = true }
@@ -621,7 +621,7 @@ private fun ExportScreen(
                     Spacer(Modifier.height(12.dp))
                     Text("PC 로 옮긴 다음", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "PC 에 'Pictures/사진위치분류' 폴더를 복사했다면 폰의 분류 폴더를 비워 공간을 확보하세요.",
+                        "PC 에 'Pictures/앨범박스' 폴더를 복사했다면 폰의 분류 폴더를 비워 공간을 확보하세요.",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Spacer(Modifier.height(8.dp))

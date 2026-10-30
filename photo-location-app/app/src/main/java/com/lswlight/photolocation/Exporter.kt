@@ -7,8 +7,11 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.MediaStore
 
-/** 내보내기 폴더. PC 에서는 '내장 메모리/Pictures/사진위치분류' 로 보인다. */
-const val EXPORT_ROOT = "Pictures/사진위치분류/"
+/** 내보내기 폴더. PC 에서는 '내장 메모리/Pictures/앨범박스' 로 보인다. */
+const val EXPORT_ROOT = "Pictures/앨범박스/"
+
+/** 앱 이름을 바꾸기 전에 쓰던 내보내기 폴더. 비우기와 출처 판별에서 계속 인식한다. */
+const val LEGACY_EXPORT_ROOT = "Pictures/사진위치분류/"
 
 private val MONTH_FORMAT = java.text.SimpleDateFormat("yyyy년 MM월", java.util.Locale.KOREAN)
 
@@ -97,7 +100,7 @@ class Exporter(private val context: Context) {
         false
     }
 
-    /** 내보내기 폴더 안의 모든 사진·동영상 */
+    /** 내보내기 폴더(예전 이름 폴더 포함) 안의 모든 사진·동영상 */
     fun exportedUris(): List<Uri> {
         val uris = mutableListOf<Uri>()
         val collections = MediaStore.getExternalVolumeNames(context).flatMap { volume ->
@@ -107,8 +110,8 @@ class Exporter(private val context: Context) {
             resolver.query(
                 collection,
                 arrayOf(MediaStore.MediaColumns._ID),
-                "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?",
-                arrayOf("$EXPORT_ROOT%"),
+                "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ? OR ${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?",
+                arrayOf("$EXPORT_ROOT%", "$LEGACY_EXPORT_ROOT%"),
                 null,
             )?.use { c ->
                 while (c.moveToNext()) uris += android.content.ContentUris.withAppendedId(collection, c.getLong(0))

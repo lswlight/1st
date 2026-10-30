@@ -369,7 +369,7 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
         requestNextMove()
     }
 
-    /** 내보내기 폴더(Pictures/사진위치분류)를 통째로 휴지통으로 보낸다. */
+    /** 내보내기 폴더(Pictures/앨범박스)를 통째로 휴지통으로 보낸다. */
     fun clearExported() {
         if (_state.value.exportProgress != null) return
         viewModelScope.launch {
@@ -461,4 +461,4 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
 }
 
 private const val PC_GUIDE =
-    "\n\nPC 에 USB 로 연결한 뒤 '내 PC › 휴대폰 › 내장 메모리 › Pictures › 사진위치분류' 폴더를 복사하세요."
+    "\n\nPC 에 USB 로 연결한 뒤 '내 PC › 휴대폰 › 내장 메모리 › Pictures › 앨범박스' 폴더를 복사하세요."
