@@ -40,6 +40,8 @@ EXITS = {
     "trail": "추적(종가가 중심선 아래면 정리)",
 }
 FILTERS = {"none": "필터 없음", "btc": "BTC 일봉 중심선 위일 때만"}
+LARGE = {"BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "ADAUSDT", "TRXUSDT", "LINKUSDT",
+         "LTCUSDT"}
 
 
 # ------------------------------------------------------------------ 데이터 (캐시)
@@ -77,30 +79,7 @@ def regime_at(regime, t):
 
 # ------------------------------------------------------------------ 청산
 
-def exit_trade(bars, ind, i, tr, mode, hold, trail_hold):
-    """(결과, R, 청산 봉 번호). 손절은 늘 먼저 본다 (한 봉이 손절과 목표를 둘 다 건드리면 손절)."""
-    entry, stop, risk = tr["entry"], tr["stop"], tr["risk"]
-    if tr["setup"] == "lower_reentry" or mode.startswith("fixed"):
-        target = tr["target"] if tr["setup"] == "lower_reentry" else entry + (2 if mode == "fixed2r" else 3) * risk
-        r_t = (target - entry) / risk
-        for j in range(i + 1, min(len(bars), i + 1 + hold)):
-            b = bars[j]
-            if b["l"] <= stop or b["o"] <= stop:
-                return "stop", -1.0, j
-            if b["h"] >= target:
-                return "target", r_t, j
-        j = min(len(bars) - 1, i + hold)
-        return ("time", (bars[j]["c"] - entry) / risk, j) if j > i else ("open", 0.0, i)
-    # 추적: 처음 손절은 그대로, 종가가 볼린저 중심선 아래로 마감하면 그 종가에 정리
-    for j in range(i + 1, min(len(bars), i + 1 + trail_hold)):
-        b = bars[j]
-        if b["l"] <= stop or b["o"] <= stop:
-            return "stop", -1.0, j
-        mid = ind[j]["bb"]["mid"] if ind[j]["bb"] else None
-        if mid and b["c"] < mid:
-            return "trail", (b["c"] - entry) / risk, j
-    j = min(len(bars) - 1, i + trail_hold)
-    return ("time", (bars[j]["c"] - entry) / risk, j) if j > i else ("open", 0.0, i)
+exit_trade = pts.exit_trade      # 청산 규칙은 points.py 와 같은 것을 쓴다
 
 
 # ------------------------------------------------------------------ 집계
@@ -217,14 +196,27 @@ def cmd_run(args):
             print("     전체 %s" % fmt(st_all))
             print("     앞   %s" % fmt(st_is))
             print("     뒤   %s" % fmt(st_oos))
-            report["results"].append({"tf": tf, "setup": setup, "exit": mode, "filter": flt,
+            rs = sorted((t["rnet"] for t in lst), reverse=True)
+            ex10 = statistics.fmean(rs[10:]) if len(rs) > 20 else None
+            large = summarize([t for t in lst if t["sym"] in LARGE])
+            if ex10 is not None or large:
+                print("     견고성: 상위 10건 빼면 평균 %s, 대형 10개만 %s" % (
+                    "%+.3fR" % ex10 if ex10 is not None else "-", fmt(large).strip()))
+            report["results"].append({"tf": tf, "setup": setup, "exit": "target" if mode == "목표=중심선" else mode,
+                                      "filter": flt, "coins": len(symbols),
                                       "all": st_all, "in_sample": st_is, "out_of_sample": st_oos,
+                                      "ex_top10_avg": ex10, "large_avg": large["avg"] if large else None,
                                       "cut": cut.isoformat()})
     print("\n✅ = 앞·뒤 기간 모두 수수료 후 평균 플러스, 뒤 기간 20회 이상.")
     print("지금 거래대금 상위 코인만 본 결과라 생존 편향이 있습니다. 과거 기록이지 예측이 아닙니다.")
     if args.write:
         p = crt.save_json(args.write, report)
         print("저장: %s" % p)
+    if args.evidence:
+        path = os.path.join(HERE, "evidence.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(report, fh, ensure_ascii=False, indent=1, default=str)
+        print("검증 자료 저장: %s (points.py 가 신호 옆에 보여 준다)" % path)
     return 0
 
 
@@ -242,6 +234,7 @@ def main(argv=None):
     p.add_argument("--quiet", action="store_true")
     p.add_argument("--config", default="config.json")
     p.add_argument("--write", nargs="?", const="lab.json")
+    p.add_argument("--evidence", action="store_true", help="coin-signal/evidence.json 을 새로 쓴다")
     args = ap.parse_args(argv)
     try:
         return cmd_run(args)

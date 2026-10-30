@@ -121,22 +121,60 @@ class TestOffline(unittest.TestCase):
         code, out = run(["now", "BTC", "--offline", FIX, "--now", "2026-10-30 08:30"])
         self.assertIn("BTCUSDT", out)
         self.assertIn("[중기 · 일봉] 마지막 완성 봉 2026-10-28", out)     # 09:00 전이라 10/29 일봉은 진행 중
-        self.assertIn("[단기 · 1시간봉] 마지막 완성 봉 10-30 07:00", out)
+        self.assertIn("[단기 · 4시간봉] 마지막 완성 봉 10-30 01:00", out)    # 05:00 에 끝난 봉
+        self.assertIn("BTC 일봉:", out)
         self.assertIn("스퀴즈 진행 중", out)
 
     def test_backtest_counts_consistent(self):
         f = crt.Fetcher(FIX)
         a = pts.analyze("BTCUSDT", "short", f, crt.config(), crt.parse_kst("2026-10-30 08:30"))
-        for name, st in a["stats"].items():
-            self.assertEqual(st["n"], st["target"] + st["stop"] + st["time"], name)
-            if st["n"]:
-                self.assertAlmostEqual(st["avg_rnet"], st["avg_r"] - (st["avg_r"] - st["avg_rnet"]))
-                self.assertLess(st["avg_rnet"], st["avg_r"])       # 비용을 빼면 항상 줄어든다
+        self.assertEqual(set(a["stats"]["squeeze_break"]), {"fixed2r", "trail"})
+        self.assertEqual(set(a["stats"]["lower_reentry"]), {"target"})
+        for name, per in a["stats"].items():
+            for mode, st in per.items():
+                self.assertEqual(st["n"], st["target"] + st["stop"] + st["time"] + st["trail"], (name, mode))
+                if st["n"]:
+                    self.assertLess(st["avg_rnet"], st["avg_r"])       # 수수료를 빼면 항상 줄어든다
+                if mode != "trail":
+                    self.assertEqual(st["trail"], 0)
 
     def test_scan_offline(self):
         code, out = run(["scan", "--tf", "mid", "--symbols", "BTC", "--offline", FIX,
                          "--now", "2026-10-30 08:30"])
         self.assertIn("1개 중 1개 분석", out)
+
+
+class TestEvidenceAndManage(unittest.TestCase):
+    def test_grade(self):
+        good = {"all": {"n": 195, "win": 35, "avg": 0.9}, "out_of_sample": {"avg": 0.99},
+                "ex_top10_avg": 0.05, "large_avg": 0.47}
+        self.assertTrue(pts.grade(good).startswith("튼튼함"))
+        tail = dict(good, ex_top10_avg=-0.1)
+        self.assertTrue(pts.grade(tail).startswith("플러스지만"))
+        bad = {"all": {"n": 600, "win": 41, "avg": -0.02}, "out_of_sample": {"avg": -0.05}}
+        self.assertTrue(pts.grade(bad).startswith("수수료 후 마이너스"))
+        self.assertEqual(pts.grade(None), "검증 자료 없음")
+
+    def test_evidence_file_matches(self):
+        ev = pts.load_evidence()
+        self.assertIsNotNone(ev, "coin-signal/evidence.json 이 있어야 한다 (lab.py run --evidence)")
+        r = pts.evidence_for(ev, "mid", "squeeze_break", "trail")
+        self.assertEqual(r["tf"], "1d")
+        self.assertIn("out_of_sample", r)
+        self.assertIsNotNone(pts.evidence_for(ev, "short", "squeeze_break", "fixed2r"))
+
+    def test_manage(self):
+        # 2026-10-28 일봉 종가 81,343.5, 중심선 약 81,934 -> 종가가 중심선 아래 -> 추적 청산 신호
+        code, out = run(["manage", "BTC", "--entry", "80000", "--stop", "76000", "--offline", FIX,
+                         "--now", "2026-10-30 08:30"])
+        self.assertEqual(code, 2)
+        self.assertIn("추적 청산 신호", out)
+        code, out = run(["manage", "BTC", "--entry", "83000", "--stop", "81500", "--offline", FIX,
+                         "--now", "2026-10-30 08:30"])
+        self.assertIn("손절 도달", out)
+        code, out = run(["manage", "BTC", "--entry", "70000", "--stop", "76000", "--offline", FIX,
+                         "--now", "2026-10-30 08:30"])
+        self.assertIn("손절가가 진입가보다 낮아야", out)
 
 
 if __name__ == "__main__":
