@@ -1,31 +1,31 @@
-# SYMBOL|한글 이름|영문 이름  (업비트 원화 마켓 24시간 거래대금 상위 30개, 투자유의·스테이블코인 제외)
-XRP-KRW|엑스알피(리플)|XRP
-BTC-KRW|비트코인|Bitcoin
-ETH-KRW|이더리움|Ethereum
-AXIS-KRW|액시스로보틱스|Axis Robotics
-ENA-KRW|에테나|Ethena
-NEAR-KRW|니어프로토콜|NEAR Protocol
-QUID-KRW|스퀴드|Squid
-ONDO-KRW|온도파이낸스|Ondo Finance
-SOL-KRW|솔라나|Solana
-PEPE-KRW|페페|Pepe
-IRYS-KRW|아이리스|Irys
-WLD-KRW|월드코인|Worldcoin
-LSK-KRW|리스크|Lisk
-DOGE-KRW|도지코인|Dogecoin
-MPLX-KRW|메타플렉스|Metaplex
-BLEND-KRW|플루언트|Fluent
-KAT-KRW|카타나|Katana
-TRX-KRW|트론|TRON
-SUI-KRW|수이|Sui
-ADA-KRW|에이다|Ada
-CAP-KRW|캡|Cap
-XLM-KRW|스텔라루멘|Lumen
-LINK-KRW|체인링크|Chainlink
-GTC-KRW|깃코인|Gitcoin
-DOOD-KRW|두들즈|Doodles
-UNI-KRW|유니스왑|Uniswap
-LIT-KRW|라이터|Lighter
-HBAR-KRW|헤데라|Hedera
-ELF-KRW|엘프|aelf
-CT-KRW|콘크리트|Concrete
+# SYMBOL|한글 이름(업비트)|티커  (바이낸스 현물 USDT 24시간 거래대금 상위 30개, 스테이블 제외)
+BTCUSDT|비트코인|BTC
+ETHUSDT|이더리움|ETH
+BNBUSDT||BNB
+SOLUSDT|솔라나|SOL
+ZECUSDT||ZEC
+XRPUSDT|엑스알피(리플)|XRP
+PEPEUSDT|페페|PEPE
+NEARUSDT|니어프로토콜|NEAR
+HYPEUSDT||HYPE
+TRXUSDT|트론|TRX
+ENAUSDT|에테나|ENA
+UNIUSDT|유니스왑|UNI
+DOGEUSDT|도지코인|DOGE
+SUIUSDT|수이|SUI
+LINKUSDT|체인링크|LINK
+WLDUSDT|월드코인|WLD
+PUMPUSDT|펌프펀|PUMP
+ADAUSDT|에이다|ADA
+PARTIUSDT||PARTI
+AAVEUSDT|에이브|AAVE
+TAOUSDT|비트텐서|TAO
+ARBUSDT|아비트럼|ARB
+AVAXUSDT|아발란체|AVAX
+LTCUSDT||LTC
+HBARUSDT|헤데라|HBAR
+ONDOUSDT|온도파이낸스|ONDO
+FETUSDT||FET
+ZROUSDT|레이어제로|ZRO
+XAUTUSDT|테더골드|XAUT
+INJUSDT|인젝티브|INJ

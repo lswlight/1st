@@ -1,4 +1,4 @@
-"""kr-trader 공통 모듈: 시장 정의, Yahoo 차트 데이터, 지표, 호가 단위, 상태 파일.
+"""kr-trader 공통 모듈: 시장 정의, 차트 데이터(Yahoo·바이낸스·업비트), 지표, 호가 단위, 상태 파일.
 
 표준 라이브러리만 쓴다. 모든 시각은 한국 시간(KST)이다.
 """
@@ -30,7 +30,7 @@ MARKETS = {
 }
 
 DEFAULT_CONFIG = {
-    "crypto_source": "upbit",
+    "crypto_source": "binance",
     "budget_krw": 5000000,
     "max_loss_per_trade_krw": 50000,
     "cash_buffer_pct": 10,
@@ -43,6 +43,8 @@ DEFAULT_CONFIG = {
     "krx_commission_pct": 0.015,
     "krx_sell_tax_pct": 0.20,
     "crypto_fee_pct": 0.05,
+    "binance_fee_pct": 0.10,
+    "usdkrw": None,
     "krx_flat_by": "14:50",
     "krx_last_entry": "14:30",
     "crypto_hold_hours": 6,
@@ -89,12 +91,24 @@ def fmt_time(t):
 # ------------------------------------------------------------------ 종목
 
 def market_of(symbol):
-    return "crypto" if symbol.upper().endswith("-KRW") else "krx"
+    s = symbol.upper()
+    return "crypto" if (s.endswith("-KRW") or (s.endswith("USDT") and "." not in s)) else "krx"
 
 
-def load_universe(market):
-    """종목 목록 파일: 한 줄에 SYMBOL|한글 이름|Yahoo 이름."""
-    path = os.path.join(ROOT, "kr-scanner", "universe-%s.txt" % market)
+def quote_of(symbol):
+    """가격 통화: 바이낸스 심볼(BTCUSDT)은 USDT, 나머지는 원화."""
+    return "USDT" if symbol.upper().endswith("USDT") else "KRW"
+
+
+def universe_file(market):
+    if market == "crypto":
+        return "universe-crypto.txt" if crypto_source() == "binance" else "universe-upbit.txt"
+    return "universe-%s.txt" % market
+
+
+def load_universe(market, filename=None):
+    """종목 목록 파일: 한 줄에 SYMBOL|한글 이름|영문 이름."""
+    path = os.path.join(ROOT, "kr-scanner", filename or universe_file(market))
     rows = []
     with open(path, encoding="utf-8") as fh:
         for line in fh:
@@ -109,9 +123,9 @@ def load_universe(market):
 
 def names():
     out = {}
-    for m in MARKETS:
+    for fn in ("universe-krx.txt", "universe-crypto.txt", "universe-upbit.txt"):
         try:
-            for r in load_universe(m):
+            for r in load_universe(None, fn):
                 out[r["symbol"]] = r["name"] or r["yahoo_name"]
         except OSError:
             pass
@@ -119,11 +133,11 @@ def names():
 
 
 def normalize(symbol):
-    """005930 -> 005930.KS (목록에서 시장 확인), btc -> BTC-KRW."""
+    """005930 -> 005930.KS (목록에서 시장 확인), btc -> BTCUSDT (바이낸스) 또는 BTC-KRW (업비트)."""
     s = symbol.strip().upper()
     if not s:
         raise KrtError("종목이 비어 있습니다")
-    if "." in s or s.endswith("-KRW"):
+    if "." in s or s.endswith("-KRW") or (s.endswith("USDT") and len(s) > 4):
         return s
     if s.isdigit() and len(s) == 6:
         for r in load_universe("krx"):
@@ -131,19 +145,23 @@ def normalize(symbol):
                 return r["symbol"]
         return s
     if s.isalpha():
-        return s + "-KRW"
+        return s + ("USDT" if crypto_source() == "binance" else "-KRW")
     return s
 
 
 # ------------------------------------------------------------------ 데이터
 
 UPBIT = "https://api.upbit.com/v1"
+BINANCE = "https://data-api.binance.vision/api/v3"   # 시세 전용 공개 주소 (api.binance.com 은 서버 위치 차단)
+STABLES = {"USDT", "USDC", "FDUSD", "TUSD", "USDP", "DAI", "BUSD", "USDE", "USDS", "PYUSD", "EUR", "EURI",
+           "AEUR", "XUSD", "USD1", "BFUSD", "RLUSD", "U", "PAXG", "WBTC", "WBETH", "BNSOL"}
 
 
 def crypto_source():
-    """코인 데이터원: 업비트(기본) 또는 Yahoo. 환경 변수 KRT_CRYPTO_SOURCE 나 config 의 crypto_source."""
+    """코인 기본 데이터원: binance(기본), upbit, yahoo. 환경 변수 KRT_CRYPTO_SOURCE 나 config 의 crypto_source.
+    심볼이 정해져 있으면 심볼 형식이 우선한다: BTCUSDT 는 바이낸스, BTC-KRW 는 업비트."""
     src = os.environ.get("KRT_CRYPTO_SOURCE") or (load_json("config.json", {}) or {}).get("crypto_source")
-    return (src or "upbit").lower()
+    return (src or "binance").lower()
 
 
 def upbit_market(symbol):
@@ -174,9 +192,34 @@ class Fetcher(object):
     def chart(self, symbol, rng, interval):
         if self.offline:
             return self._offline(symbol, interval)
-        if market_of(symbol) == "crypto" and (self.source or crypto_source()) == "upbit":
-            return self._upbit(symbol, rng, interval)
+        if market_of(symbol) == "crypto":
+            if quote_of(symbol) == "USDT":
+                return self._binance(symbol, rng, interval)
+            if (self.source or crypto_source()) != "yahoo":
+                return self._upbit(symbol, rng, interval)
         return self._yahoo(symbol, rng, interval)
+
+    def _binance(self, symbol, rng, interval):
+        """바이낸스 현물 캔들. 한 번에 1,000개 (5분봉 60일이면 18번)."""
+        step = {"5m": BAR, "1d": timedelta(days=1)}.get(interval)
+        if not step:
+            raise KrtError("바이낸스는 5m, 1d 만 씁니다")
+        end_ms = int(time.time() * 1000)
+        start_ms = end_ms - int(timedelta(days=range_days(rng)).total_seconds() * 1000)
+        rows, cur = [], start_ms
+        while cur < end_ms:
+            url = "%s/klines?symbol=%s&interval=%s&limit=1000&startTime=%d" % (BINANCE, symbol.upper(), interval, cur)
+            page = self._get(url, symbol, "바이낸스")
+            if not page:
+                break
+            rows.extend(page)
+            nxt = page[-1][0] + int(step.total_seconds() * 1000)
+            if nxt <= cur or len(page) < 1000:
+                break
+            cur = nxt
+        if not rows:
+            raise KrtError("%s: 바이낸스 캔들이 비어 있습니다" % symbol)
+        return binance_result(rows, symbol)
 
     def _get(self, url, symbol, what):
         for attempt in range(3):
@@ -191,6 +234,8 @@ class Fetcher(object):
                     continue
                 if e.code in (400, 404):
                     raise KrtError("%s: %s에 없는 종목입니다" % (symbol, what))
+                if e.code == 451:
+                    raise KrtError("%s: %s가 이 서버 위치를 차단했습니다 (451)" % (symbol, what))
                 raise KrtError("%s: %s 응답 오류 %s" % (symbol, what, e.code))
             except (urllib.error.URLError, OSError, ValueError) as e:
                 raise KrtError("%s: %s 데이터를 받지 못했습니다 (%s)" % (symbol, what, e))
@@ -258,6 +303,8 @@ class Fetcher(object):
                 opener = gzip.open if path.endswith(".gz") else open
                 with opener(path, "rt", encoding="utf-8") as fh:
                     data = json.load(fh)
+                if isinstance(data, list) and data and isinstance(data[0], list):
+                    return binance_result(data, symbol)
                 if isinstance(data, list):
                     return upbit_result(data, symbol, interval)
                 return chart_result(data, symbol)
@@ -291,6 +338,49 @@ def upbit_result(rows, symbol, interval):
         bars = out
     return {"meta": {"exchangeName": "UPBIT", "source": "upbit", "market": upbit_market(symbol),
                      "filled": filled}, "bars": bars}
+
+
+def binance_result(rows, symbol):
+    """바이낸스 klines -> {"meta", "bars"}. val 은 USDT 거래대금."""
+    seen, bars = set(), []
+    for r in rows:
+        t = datetime.fromtimestamp(r[0] / 1000, KST)
+        if t in seen:
+            continue
+        seen.add(t)
+        bars.append({"t": t, "o": float(r[1]), "h": float(r[2]), "l": float(r[3]), "c": float(r[4]),
+                     "v": float(r[5]), "val": float(r[7])})
+    bars.sort(key=lambda b: b["t"])
+    return {"meta": {"exchangeName": "BINANCE", "source": "binance", "currency": "USDT"}, "bars": bars}
+
+
+def usdkrw(fetcher=None, cfg=None):
+    """원/달러(USDT). 설정값 -> 업비트 KRW-USDT 체결가(한국에서 실제로 USDT를 사는 값) -> Yahoo KRW=X."""
+    if cfg and cfg.get("usdkrw"):
+        return float(cfg["usdkrw"]), "설정값"
+    f = fetcher or Fetcher()
+    try:
+        t = f._get(UPBIT + "/ticker?markets=KRW-USDT", "USDT", "업비트")
+        return float(t[0]["trade_price"]), "업비트 USDT"
+    except (KrtError, KeyError, IndexError, ValueError):
+        pass
+    try:
+        d = f._yahoo("KRW=X", "5d", "1d")
+        return float(d["bars"][-1]["c"]), "Yahoo 환율"
+    except (KrtError, IndexError):
+        raise KrtError("원/달러 환율을 받지 못했습니다. krt/config.json 에 \"usdkrw\": 1400 처럼 넣어 주세요")
+
+
+def kimchi(symbol, price_usdt, fetcher, fx=None):
+    """같은 코인의 업비트 원화가와 바이낸스 환산가 차이(%). 업비트에 없으면 None."""
+    base = symbol.upper()[:-4]
+    try:
+        t = fetcher._get(UPBIT + "/ticker?markets=KRW-" + base, base, "업비트")
+        krw = float(t[0]["trade_price"])
+        fx = fx or usdkrw(fetcher)[0]
+        return {"upbit_krw": krw, "fx": fx, "premium_pct": (krw / (price_usdt * fx) - 1) * 100}
+    except (KrtError, KeyError, IndexError, ValueError, ZeroDivisionError):
+        return None
 
 
 def bar_value(b, market):
@@ -475,9 +565,13 @@ KRX_TICKS = [(2000, 1), (5000, 5), (20000, 10), (50000, 50),
              (200000, 100), (500000, 500), (float("inf"), 1000)]
 
 
-def tick_size(price, market="krx"):
+def tick_size(price, market="krx", quote="KRW"):
     """국내 주식은 2023년 개편된 유가·코스닥 공통 호가 단위.
-    코인은 거래소마다 달라 근사치(가격 자릿수 기준)를 쓴다."""
+    코인은 거래소마다 달라 근사치를 쓴다: 원화는 가격 자릿수 기준, USDT 는 가격의 약 0.0001% 단위."""
+    if quote == "USDT":
+        if price <= 0:
+            return 1e-8
+        return max(10 ** (math.floor(math.log10(price)) - 6), 1e-8)
     if market == "krx":
         for limit, tick in KRX_TICKS:
             if price < limit:
@@ -497,23 +591,23 @@ def tick_size(price, market="krx"):
     return 0.00001
 
 
-def _snap(price, market, fn):
-    t = tick_size(price, market)
+def _snap(price, market, fn, quote="KRW"):
+    t = tick_size(price, market, quote)
     v = fn(price / t - 1e-9 if fn is math.ceil else price / t + 1e-9) * t
-    return round(v, 6)
+    return round(v, 10)
 
 
-def round_down(price, market="krx"):
-    return _snap(price, market, math.floor)
+def round_down(price, market="krx", quote="KRW"):
+    return _snap(price, market, math.floor, quote)
 
 
-def round_up(price, market="krx"):
-    return _snap(price, market, math.ceil)
+def round_up(price, market="krx", quote="KRW"):
+    return _snap(price, market, math.ceil, quote)
 
 
-def round_near(price, market="krx"):
-    t = tick_size(price, market)
-    return round(math.floor(price / t + 0.5) * t, 6)
+def round_near(price, market="krx", quote="KRW"):
+    t = tick_size(price, market, quote)
+    return round(math.floor(price / t + 0.5) * t, 10)
 
 
 def won(x):
@@ -524,11 +618,28 @@ def won(x):
 
 
 def price_str(x, market="krx"):
-    if market == "krx" or abs(x) >= 1000:
+    """국내 주식은 정수. 코인은 원화·USDT 모두 의미 있는 자리까지 (끝의 0은 지움)."""
+    if market == "krx":
         return "{:,.0f}".format(x)
-    if abs(x) >= 1:
-        return "{:,.3f}".format(x).rstrip("0").rstrip(".")
-    return "{:.5f}".format(x)
+    a = abs(x)
+    if a >= 1:
+        s = "{:,.2f}".format(x) if a >= 100 else "{:,.4f}".format(x)
+    elif a >= 0.01:
+        s = "{:.5f}".format(x)
+    else:
+        s = "{:.8f}".format(x)
+    return s.rstrip("0").rstrip(".") if "." in s else s
+
+
+def money(x, quote="KRW"):
+    """거래대금 표기: 원화는 만/억/조, USDT 는 $와 K/M/B."""
+    if quote == "USDT":
+        a = abs(x)
+        for unit, div in (("B", 1e9), ("M", 1e6), ("K", 1e3)):
+            if a >= div:
+                return "$%.1f%s" % (x / div, unit)
+        return "$%.0f" % x
+    return man(x) + "원"
 
 
 def man(x):
@@ -579,10 +690,12 @@ def die(msg, code=1):
     sys.exit(code)
 
 
-def source_label(market):
-    if market == "crypto" and crypto_source() == "upbit":
-        return "업비트"
+def source_label(market, symbol=None):
+    if market == "crypto":
+        if symbol:
+            return "바이낸스" if quote_of(symbol) == "USDT" else ("업비트" if crypto_source() != "yahoo" else "Yahoo 지연 시세")
+        return {"binance": "바이낸스", "upbit": "업비트"}.get(crypto_source(), "Yahoo 지연 시세")
     return "Yahoo 지연 시세"
 
 
-DISCLAIMER = "규칙에 맞는지 확인한 결과일 뿐, 매수·매도 추천이 아닙니다. 데이터는 무료 공개 시세(국내 Yahoo 지연, 코인 업비트)입니다."
+DISCLAIMER = "규칙에 맞는지 확인한 결과일 뿐, 매수·매도 추천이 아닙니다. 데이터는 무료 공개 시세(국내 Yahoo 지연, 코인 바이낸스·업비트)입니다."
