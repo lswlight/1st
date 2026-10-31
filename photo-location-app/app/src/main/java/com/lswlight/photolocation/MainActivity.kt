@@ -288,7 +288,7 @@ private fun App(vm: GalleryViewModel = viewModel()) {
             PhotoScreen(
                 photo,
                 // 같은 분기 폴더의 사진들 사이를 좌우로 넘긴다.
-                photos = month.second,
+                photos = month!!.second,
                 onPageChanged = { openPhotoId = it.id },
                 onBack = { openPhotoId = null },
                 onDelete = { vm.deleteItems(listOf(photo)) },
