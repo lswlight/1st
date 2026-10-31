@@ -1,0 +1,47 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.lsw.fermatainstaller'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.lsw.fermatainstaller'
+        // 무선 디버깅(Shizuku 단독 실행)은 안드로이드 11 이상
+        minSdk 30
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0'
+    }
+
+    // 개인 사이드로드용 고정 키 (업데이트 시 덮어쓰기 설치 가능)
+    signingConfigs {
+        personal {
+            storeFile file('../keystore/personal.jks')
+            storePassword 'android'
+            keyAlias 'installer'
+            keyPassword 'android'
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.personal
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.personal
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'dev.rikka.shizuku:api:13.1.5'
+    implementation 'dev.rikka.shizuku:provider:13.1.5'
+}
