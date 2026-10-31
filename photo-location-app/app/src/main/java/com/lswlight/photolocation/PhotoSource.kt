@@ -17,6 +17,7 @@ val RECEIVED_ORDER = listOf(KAKAO, SCREENSHOT, DOWNLOAD)
 /**
  * 받은 사진이면 그룹 이름을, 카메라로 찍은 사진이면 null 을 돌려준다.
  * 예: "Pictures/KakaoTalk/" → 💬 카카오톡, "DCIM/Camera/" → null, "Pictures/Band/" → 🗂️ Band
+ * 갤러리 앱에서 만든 앨범(예: DCIM/보안카드, Pictures/보안카드)도 앨범 이름으로 따로 묶는다.
  */
 fun receivedGroupName(relativePath: String): String? {
     val path = relativePath.trim('/')
@@ -33,8 +34,8 @@ fun receivedGroupName(relativePath: String): String? {
         "kakaotalk" in lower -> KAKAO
         "screenshot" in lower || "screen record" in lower || "screenrecord" in lower -> SCREENSHOT
         lower.startsWith("download") -> DOWNLOAD
-        // DCIM/Camera 등 카메라 폴더
-        lower.startsWith("dcim") -> null
+        // 카메라가 찍어 저장하는 폴더만 위치로 분류한다: DCIM, DCIM/Camera, DCIM/100ANDRO 같은 번호 폴더
+        lower == "dcim" || lower.startsWith("dcim/camera") || Regex("^dcim/\\d{3}").containsMatchIn(lower) -> null
         path.isEmpty() -> "${OTHER_APP_PREFIX}기타"
         else -> OTHER_APP_PREFIX + path.substringAfterLast('/')
     }
