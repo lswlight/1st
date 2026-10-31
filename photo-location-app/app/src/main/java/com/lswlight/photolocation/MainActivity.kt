@@ -42,7 +42,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -84,6 +89,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -91,6 +97,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.round
+import androidx.compose.ui.unit.toIntRect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -101,6 +114,8 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -917,11 +932,26 @@ private fun GroupScreen(
     var picking by remember { mutableStateOf(false) }
     var naming by remember { mutableStateOf(false) }
     val selecting = selected.isNotEmpty()
-    fun toggle(photo: Photo) {
-        selected = if (photo.id in selected) selected - photo.id else selected + photo.id
-    }
 
     BackHandler(enabled = selecting) { selected = emptySet() }
+
+    // 꾹 눌러 끌기 선택: 화면에 보이는 순서(최신순)대로 사진 id 와 위치
+    val gridState = rememberLazyGridState()
+    val haptics = LocalHapticFeedback.current
+    val orderedIds = remember(group) { group.photos.map { it.id } }
+    val indexOf = remember(orderedIds) { orderedIds.withIndex().associate { it.value to it.index } }
+    val photoById = remember(group) { group.photos.associateBy { it.id } }
+    // 끌다가 손가락이 화면 위·아래 끝에 닿으면 그쪽으로 자동 스크롤
+    var autoScroll by remember { mutableFloatStateOf(0f) }
+    val edge = with(LocalDensity.current) { 64.dp.toPx() }
+    LaunchedEffect(autoScroll) {
+        if (autoScroll != 0f) {
+            while (isActive) {
+                gridState.scrollBy(autoScroll)
+                delay(10)
+            }
+        }
+    }
 
     if (picking) {
         AlertDialog(
@@ -1014,7 +1044,58 @@ private fun GroupScreen(
     ) { padding ->
         LazyVerticalGrid(
             columns = GridCells.Adaptive(110.dp),
-            modifier = Modifier.padding(padding).fillMaxSize(),
+            state = gridState,
+            modifier = Modifier.padding(padding).fillMaxSize()
+                // 짧게 누르기: 선택 중이면 선택/해제, 아니면 크게 보기
+                .pointerInput(orderedIds) {
+                    detectTapGestures(
+                        onTap = { pos ->
+                            gridState.photoIdAt(pos)?.let { id ->
+                                if (selecting) {
+                                    selected = if (id in selected) selected - id else selected + id
+                                } else {
+                                    photoById[id]?.let(onPhoto)
+                                }
+                            }
+                        },
+                        // 길게 누르기는 아래 끌기 선택에서 처리한다.
+                        onLongPress = {},
+                    )
+                }
+                // 꾹 누른 채로 끌면 처음 사진부터 지금 손가락 아래 사진까지 한꺼번에 선택
+                .pointerInput(orderedIds) {
+                    var start: Int? = null
+                    var before = emptySet<Long>()
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { pos ->
+                            gridState.photoIdAt(pos)?.let { id ->
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                start = indexOf[id]
+                                before = selected - id
+                                selected = selected + id
+                            }
+                        },
+                        onDragEnd = { start = null; autoScroll = 0f },
+                        onDragCancel = { start = null; autoScroll = 0f },
+                        onDrag = { change, _ ->
+                            val from = start
+                            if (from != null) {
+                                val y = change.position.y
+                                val height = gridState.layoutInfo.viewportSize.height
+                                autoScroll = when {
+                                    y > height - edge -> (y - (height - edge)) / 4
+                                    y < edge -> -(edge - y) / 4
+                                    else -> 0f
+                                }
+                                gridState.photoIdAt(change.position)?.let { id ->
+                                    val to = indexOf[id] ?: return@let
+                                    val range = if (from <= to) from..to else to..from
+                                    selected = before + orderedIds.subList(range.first, range.last + 1)
+                                }
+                            }
+                        },
+                    )
+                },
             contentPadding = PaddingValues(2.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -1029,12 +1110,8 @@ private fun GroupScreen(
                 }
                 items(photos, key = { it.id }) { photo ->
                     val isSelected = photo.id in selected
-                    Box(
-                        Modifier.aspectRatio(1f).combinedClickable(
-                            onClick = { if (selecting) toggle(photo) else onPhoto(photo) },
-                            onLongClick = { toggle(photo) },
-                        )
-                    ) {
+                    // 누르기·끌기는 목록 전체에서 처리한다 (위 pointerInput)
+                    Box(Modifier.aspectRatio(1f)) {
                         Thumbnail(photo, Modifier.fillMaxSize())
                         if (isSelected) {
                             Box(
@@ -1157,6 +1234,12 @@ private fun openMap(context: Context, lat: Double, lng: Double, label: String) {
     val uri = Uri.parse("geo:$lat,$lng?q=$lat,$lng(${Uri.encode(label)})")
     startSafely(context, Intent(Intent.ACTION_VIEW, uri))
 }
+
+/** 목록에서 손가락 위치에 있는 사진의 id (날짜 제목 줄이면 null) */
+private fun LazyGridState.photoIdAt(pos: Offset): Long? =
+    layoutInfo.visibleItemsInfo.firstOrNull { item ->
+        item.size.toIntRect().contains(pos.round() - item.offset)
+    }?.key as? Long
 
 /** 카카오톡 등 다른 앱으로 보내기 (여러 개 가능) */
 private fun shareItems(context: Context, items: List<Photo>) {
