@@ -1,0 +1,51 @@
+name: Fermata 설치 도우미 APK
+
+on:
+  push:
+    paths:
+      - 'fermata-installer/**'
+      - '.github/workflows/fermata-installer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Build APK
+        working-directory: fermata-installer
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Rename APK
+        run: |
+          mkdir -p out
+          cp fermata-installer/app/build/outputs/apk/release/app-release.apk out/FermataInstaller.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FermataInstaller-apk
+          path: out/FermataInstaller.apk
+
+      - name: Publish to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: fermata-installer-latest
+          name: Fermata 설치 도우미 (최신 빌드)
+          prerelease: true
+          files: out/FermataInstaller.apk
+          body: |
+            휴대폰에서 FermataInstaller.apk 를 눌러 받으세요.
+            빌드 커밋: ${{ github.sha }}
