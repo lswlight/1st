@@ -300,11 +300,6 @@ private fun App(vm: GalleryViewModel = viewModel()) {
                     vm.setWork(photo)
                     Toast.makeText(context, "이 위치를 회사로 설정했습니다.", Toast.LENGTH_SHORT).show()
                 },
-                areaName = vm.areaOf(photo),
-                onSetWorkArea = {
-                    vm.setWorkArea(photo)
-                    Toast.makeText(context, "${vm.areaOf(photo)} 전체를 회사로 설정했습니다.", Toast.LENGTH_SHORT).show()
-                },
             )
         }
         month != null -> {
@@ -536,8 +531,7 @@ private fun AnchorCard(
             Text("회사: ${state.workText ?: "찾지 못함"}", style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(4.dp))
             Text(
-                "틀렸다면 그 장소에서 찍은 사진을 열고 '집으로 설정' / '회사로 설정'을 누르세요. " +
-                    "공장·산업단지처럼 넓은 곳은 '○○시 전체를 회사로 설정'이 편합니다.",
+                "틀렸다면 아래 주소로 지정하거나, 그 장소에서 찍은 사진을 열고 '집으로 설정' / '회사로 설정'을 누르세요.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1152,8 +1146,6 @@ private fun PhotoScreen(
     onDelete: () -> Unit,
     onSetHome: () -> Unit,
     onSetWork: () -> Unit,
-    areaName: String?,
-    onSetWorkArea: () -> Unit,
 ) {
     val context = LocalContext.current
     val dateText = remember(photo.dateTaken) {
@@ -1200,8 +1192,7 @@ private fun PhotoScreen(
                     }
                 }
             }
-            // 휴대폰 하단 버튼(◁ ○ |||)에 가리지 않도록 그 높이만큼 띄운다.
-            Column(Modifier.navigationBarsPadding().padding(16.dp)) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text(dateText, fontWeight = FontWeight.SemiBold)
                 if (photo.lat != null && photo.lng != null) {
                     Text(
@@ -1209,7 +1200,7 @@ private fun PhotoScreen(
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (photo.lat != null && photo.lng != null) {
                         OutlinedButton(onClick = { openMap(context, photo.lat, photo.lng, photo.name) }) {
@@ -1233,11 +1224,6 @@ private fun PhotoScreen(
                     }
                     IconButton(onClick = onDelete) {
                         Icon(Icons.Default.Delete, contentDescription = "삭제", tint = MaterialTheme.colorScheme.error)
-                    }
-                }
-                if (photo.hasLocation && areaName != null) {
-                    TextButton(onClick = onSetWorkArea, contentPadding = compact) {
-                        Text("🏢 ${areaName.substringAfterLast(' ')} 전체를 회사로 설정")
                     }
                 }
             }

@@ -205,12 +205,6 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
     fun setHome(photo: Photo) = setAnchor("home", photo)
     fun setWork(photo: Photo) = setAnchor("work", photo)
 
-    /** 이 사진이 찍힌 시·군·구 전체를 회사로 지정한다. */
-    fun setWorkArea(photo: Photo) {
-        anchorStore.workArea = areaOf(photo) ?: return
-        refreshGroups()
-    }
-
     /** 사진이 찍힌 시·군·구 이름 (주소를 아직 못 찾았으면 null) */
     fun areaOf(photo: Photo): String? =
         if (photo.hasLocation) namer.cached(namer.cellKey(photo.lat!!, photo.lng!!))?.district else null
