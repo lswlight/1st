@@ -1220,24 +1220,24 @@ private fun PhotoScreen(
                         Text(if (photo.isVideo) "동영상 재생" else "갤러리 앱에서 열기")
                     }
                 }
-                if (photo.hasLocation) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = onSetHome) { Text("🏠 집으로 설정") }
-                        TextButton(onClick = onSetWork) { Text("🏢 회사로 설정") }
+                // 집·회사 설정 줄 오른쪽 끝에 공유·삭제 (위치 없는 사진은 공유·삭제만)
+                val compact = PaddingValues(horizontal = 8.dp)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    if (photo.hasLocation) {
+                        TextButton(onClick = onSetHome, contentPadding = compact) { Text("🏠 집으로 설정") }
+                        TextButton(onClick = onSetWork, contentPadding = compact) { Text("🏢 회사로 설정") }
                     }
-                    if (areaName != null) {
-                        TextButton(onClick = onSetWorkArea) {
-                            Text("🏢 ${areaName.substringAfterLast(' ')} 전체를 회사로 설정")
-                        }
-                    }
-                }
-                // 공유·삭제는 엄지가 닿기 쉬운 오른쪽 아래에 둔다.
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Spacer(Modifier.weight(1f))
                     IconButton(onClick = { shareItems(context, listOf(photo)) }) {
                         Icon(Icons.Default.Share, contentDescription = "공유")
                     }
                     IconButton(onClick = onDelete) {
                         Icon(Icons.Default.Delete, contentDescription = "삭제", tint = MaterialTheme.colorScheme.error)
+                    }
+                }
+                if (photo.hasLocation && areaName != null) {
+                    TextButton(onClick = onSetWorkArea, contentPadding = compact) {
+                        Text("🏢 ${areaName.substringAfterLast(' ')} 전체를 회사로 설정")
                     }
                 }
             }
