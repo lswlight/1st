@@ -19,10 +19,13 @@ data class Entry(
     val time: LocalDateTime,
     val auto: Boolean = false, // 알림에서 자동으로 기록됐으면 true
     val raw: String = "",      // 자동 기록의 원본 알림 문구
+    val uid: String = "",      // 가족 공유용 고유번호 (저장할 때 자동으로 붙는다)
 )
 
 /** 수입·지출 내역을 폰 안의 SQLite 파일 하나에 저장한다. */
-class LedgerDb(context: Context) : SQLiteOpenHelper(context, "moneybook.db", null, 1) {
+class LedgerDb(context: Context) : SQLiteOpenHelper(context, "moneybook.db", null, 2) {
+
+    private val appContext = context.applicationContext
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -34,15 +37,27 @@ class LedgerDb(context: Context) : SQLiteOpenHelper(context, "moneybook.db", nul
                 card TEXT NOT NULL DEFAULT '',
                 time INTEGER NOT NULL,
                 auto INTEGER NOT NULL DEFAULT 0,
-                raw TEXT NOT NULL DEFAULT ''
+                raw TEXT NOT NULL DEFAULT '',
+                uid TEXT NOT NULL DEFAULT ''
             )"""
         )
         db.execSQL("CREATE INDEX idx_entries_time ON entries(time)")
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+    // 1 → 2: 가족 공유용 uid 칸 추가, 기존 내역에도 번호를 붙인다
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE entries ADD COLUMN uid TEXT NOT NULL DEFAULT ''")
+            db.rawQuery("SELECT id FROM entries", null).use { c ->
+                while (c.moveToNext()) {
+                    db.execSQL("UPDATE entries SET uid = ? WHERE id = ?", arrayOf<Any>(newUid(), c.getLong(0)))
+                }
+            }
+        }
+    }
 
-    fun save(e: Entry): Long {
+    fun save(entry: Entry): Long {
+        val e = if (entry.uid.isEmpty()) entry.copy(uid = newUid()) else entry
         val v = ContentValues().apply {
             put("kind", e.kind.name)
             put("amount", e.amount)
@@ -51,18 +66,25 @@ class LedgerDb(context: Context) : SQLiteOpenHelper(context, "moneybook.db", nul
             put("time", e.time.toMillis())
             put("auto", if (e.auto) 1 else 0)
             put("raw", e.raw)
+            put("uid", e.uid)
         }
-        return if (e.id == 0L) {
+        val id = if (e.id == 0L) {
             writableDatabase.insert("entries", null, v)
         } else {
             writableDatabase.update("entries", v, "id = ?", arrayOf(e.id.toString()))
             e.id
         }
+        FamilySync.onSaved(appContext, e)
+        return id
     }
 
     fun delete(id: Long) {
+        query("id = ?", arrayOf(id.toString())).firstOrNull()?.let { FamilySync.onDeleted(appContext, it) }
         writableDatabase.delete("entries", "id = ?", arrayOf(id.toString()))
     }
+
+    /** 가족 공유에 처음 올릴 때 쓰는 전체 내역. */
+    fun all(): List<Entry> = query("1 = 1", emptyArray())
 
     fun month(ym: YearMonth): List<Entry> {
         val from = ym.atDay(1).atStartOfDay().toMillis()
@@ -106,6 +128,7 @@ class LedgerDb(context: Context) : SQLiteOpenHelper(context, "moneybook.db", nul
                     time = c.getLong(c.getColumnIndexOrThrow("time")).toLocalDateTime(),
                     auto = c.getInt(c.getColumnIndexOrThrow("auto")) == 1,
                     raw = c.getString(c.getColumnIndexOrThrow("raw")),
+                    uid = c.getString(c.getColumnIndexOrThrow("uid")),
                 )
             }
         }
@@ -126,6 +149,8 @@ class LedgerDb(context: Context) : SQLiteOpenHelper(context, "moneybook.db", nul
 }
 
 private val ZONE: ZoneId = ZoneId.systemDefault()
+
+fun newUid(): String = java.util.UUID.randomUUID().toString()
 
 fun LocalDateTime.toMillis(): Long = atZone(ZONE).toInstant().toEpochMilli()
 

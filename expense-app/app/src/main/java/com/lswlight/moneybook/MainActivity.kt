@@ -49,6 +49,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         LedgerDb.onChanged = { refresh() }
+        if (FamilySync.configured(this) && FamilySync.pendingCount(this) > 0) FamilySync.flush(this)
         // 알림 접근은 켜져 있는데 감지 서비스가 연결돼 있지 않으면 (앱 업데이트 직후 등) 다시 연결을 요청한다
         if (listenerEnabled() && !CardNotificationListener.connected) {
             NotificationListenerService.requestRebind(ComponentName(this, CardNotificationListener::class.java))
@@ -104,6 +105,9 @@ class MainActivity : Activity() {
             addView(button("📅 달력 · 📊 그래프") { openStats(StatsActivity.TAB_CALENDAR) }, weight())
             addView(button("💳 카드별 지출") { openStats(StatsActivity.TAB_CARDS) }, weight())
         }, margins(top = 8))
+        root.addView(button("👨‍👩‍👧 가족 가계부 (함께 보기)") {
+            startActivity(Intent(this, FamilyActivity::class.java).putExtra(StatsActivity.EXTRA_MONTH, month.toString()))
+        }, margins(top = 0))
 
         // 입력 버튼
         root.addView(horizontal().apply {
@@ -255,6 +259,7 @@ class MainActivity : Activity() {
                                 time = at,
                                 auto = existing?.auto ?: false,
                                 raw = src?.raw.orEmpty(),
+                                uid = existing?.uid.orEmpty(),
                             )
                         )
                         month = YearMonth.from(at)

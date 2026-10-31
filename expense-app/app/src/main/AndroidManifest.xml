@@ -32,6 +32,12 @@
             android:parentActivityName=".MainActivity"
             android:label="달력 · 그래프" />
 
+        <activity
+            android:name=".FamilyActivity"
+            android:exported="false"
+            android:label="가족 가계부"
+            android:parentActivityName=".MainActivity" />
+
         <!-- 카드 결제 알림 감지. 설정 > 알림 접근에서 허용해야 동작한다. -->
         <service
             android:name=".CardNotificationListener"
