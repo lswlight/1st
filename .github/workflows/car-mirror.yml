@@ -1,0 +1,37 @@
+name: CarMirror APK
+
+on:
+  push:
+    paths:
+      - 'car-mirror/**'
+      - '.github/workflows/car-mirror.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Build APK
+        working-directory: car-mirror
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Rename APK
+        run: |
+          mkdir -p out
+          cp car-mirror/app/build/outputs/apk/release/app-release.apk out/CarMirror.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CarMirror-apk
+          path: out/CarMirror.apk

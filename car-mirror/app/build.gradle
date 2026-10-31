@@ -1,0 +1,46 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.lsw.carmirror'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.lsw.carmirror'
+        minSdk 29
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0'
+    }
+
+    // 개인 사이드로드 전용 서명 키. 업데이트할 때 삭제 없이 덮어쓰기 설치가 되도록 고정 키를 쓴다.
+    signingConfigs {
+        personal {
+            storeFile file('../keystore/personal.jks')
+            storePassword 'android'
+            keyAlias 'carmirror'
+            keyPassword 'android'
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.personal
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.personal
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.car.app:app:1.4.0'
+    implementation 'androidx.car.app:app-projected:1.4.0'
+}
