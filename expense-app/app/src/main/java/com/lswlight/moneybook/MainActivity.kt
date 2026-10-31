@@ -313,6 +313,15 @@ class MainActivity : Activity() {
     private fun showDetectLog() {
         val items = DetectLog.list(this)
         val body = vertical().apply { setPadding(dp(20), dp(8), dp(20), 0) }
+        val missed = items.count { it.result == "결제 문구 아님" }
+        if (missed > 0) {
+            body.addView(button("놓친 결제 다시 읽기 (${missed}건)") {
+                val n = reprocessMissed()
+                toast(if (n > 0) "${n}건을 새로 기록했어요" else "새로 읽힌 결제가 없어요")
+                refresh()
+            })
+            body.addView(text("앱을 업데이트한 뒤 누르면, 예전에 못 읽은 알림을 새 규칙으로 다시 읽어 기록해요.", 12f, Color.GRAY))
+        }
         if (items.isEmpty()) {
             body.addView(text("아직 받은 알림이 없어요.\n알림 접근이 허용되어 있는지 확인해 주세요.", 14f, Color.GRAY))
         }
@@ -336,6 +345,28 @@ class MainActivity : Activity() {
         startActivity(Intent(this, StatsActivity::class.java)
             .putExtra(StatsActivity.EXTRA_MONTH, month.toString())
             .putExtra(StatsActivity.EXTRA_TAB, tab))
+    }
+
+    /**
+     * '결제 문구 아님' 으로 남은 알림을 지금 규칙으로 다시 읽어 기록한다. 기록한 건수를 돌려준다.
+     * (같은 금액이 3분 안에 이미 있으면 중복으로 보고 건너뛴다)
+     */
+    private fun reprocessMissed(): Int {
+        val messageApps = setOf("카카오톡", "삼성 메시지", "Google 메시지")
+        var count = 0
+        for (item in DetectLog.list(this).filter { it.result == "결제 문구 아님" }) {
+            val trusted = item.app !in messageApps
+            val p = CardMessageParser.parse(item.text, item.time, trusted, ExchangeRates.cached(this), ExchangeRates.feePercent(this)) ?: continue
+            if (ExcludeList.match(this, p.merchant) != null) continue
+            val time = p.time?.takeIf { java.time.Duration.between(it, item.time).abs().toDays() < 7 } ?: item.time
+            val kind = if (p.isBenefit) Kind.INCOME else Kind.EXPENSE
+            val amount = if (p.isCancel) -p.amount else p.amount
+            if (db.hasRecentAuto(kind, amount, time)) continue
+            db.save(Entry(kind = kind, amount = amount, memo = p.memo(), card = p.card, time = time, auto = true, raw = item.text))
+            DetectLog.add(this, "자동가계부", "다시 읽어 기록됨: ${p.memo()} ${won(amount)}", item.text)
+            count++
+        }
+        return count
     }
 
     /** 자동 기록에서 뺄 상대 이름·단어 목록 편집. */
