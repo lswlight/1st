@@ -1051,7 +1051,8 @@ private fun GroupScreen(
                     detectTapGestures(
                         onTap = { pos ->
                             gridState.photoIdAt(pos)?.let { id ->
-                                if (selecting) {
+                                // pointerInput 블록은 다시 만들어지지 않으므로 선택 상태를 매번 새로 읽는다.
+                                if (selected.isNotEmpty()) {
                                     selected = if (id in selected) selected - id else selected + id
                                 } else {
                                     photoById[id]?.let(onPhoto)
