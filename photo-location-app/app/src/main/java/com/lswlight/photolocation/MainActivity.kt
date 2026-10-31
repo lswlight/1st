@@ -1168,14 +1168,6 @@ private fun PhotoScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
                     }
                 },
-                actions = {
-                    IconButton(onClick = { shareItems(context, listOf(photo)) }) {
-                        Icon(Icons.Default.Share, contentDescription = "공유")
-                    }
-                    IconButton(onClick = onDelete) {
-                        Icon(Icons.Default.Delete, contentDescription = "삭제")
-                    }
-                },
             )
         },
     ) { padding ->
@@ -1208,7 +1200,8 @@ private fun PhotoScreen(
                     }
                 }
             }
-            Column(Modifier.padding(16.dp)) {
+            // 휴대폰 하단 버튼(◁ ○ |||)에 가리지 않도록 그 높이만큼 띄운다.
+            Column(Modifier.navigationBarsPadding().padding(16.dp)) {
                 Text(dateText, fontWeight = FontWeight.SemiBold)
                 if (photo.lat != null && photo.lng != null) {
                     Text(
@@ -1236,6 +1229,15 @@ private fun PhotoScreen(
                         TextButton(onClick = onSetWorkArea) {
                             Text("🏢 ${areaName.substringAfterLast(' ')} 전체를 회사로 설정")
                         }
+                    }
+                }
+                // 공유·삭제는 엄지가 닿기 쉬운 오른쪽 아래에 둔다.
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    IconButton(onClick = { shareItems(context, listOf(photo)) }) {
+                        Icon(Icons.Default.Share, contentDescription = "공유")
+                    }
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Default.Delete, contentDescription = "삭제", tint = MaterialTheme.colorScheme.error)
                     }
                 }
             }
