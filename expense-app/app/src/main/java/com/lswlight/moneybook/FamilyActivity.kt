@@ -167,8 +167,9 @@ class FamilyActivity : Activity() {
                     "3) 배포 → 새 배포 → 유형 '웹 앱', 액세스 '모든 사용자' → 배포 → 웹 앱 URL 복사\n" +
                     "4) [공유 설정]의 '시트 주소'에 붙여 넣고 저장 → [지금까지 내역 올리기]\n" +
                     "5) [공유 코드 복사] → 카카오톡으로 가족에게 보내기\n\n" +
-                    "■ 함께 보는 사람 (예: 아내)\n" +
-                    "[공유 설정] → 받은 공유 코드 붙여 넣기 → 내 이름 적고 저장",
+                    "■ 함께 보는 사람\n" +
+                    "· 안드로이드: [공유 설정] → 받은 공유 코드 붙여 넣기 → 내 이름 적고 저장\n" +
+                    "· 아이폰: [공유 설정] → [아이폰·PC용 웹 보기 링크 복사] → 카카오톡으로 보내기 → 사파리에서 열고 공유 → '홈 화면에 추가'",
                 14f, Color.DKGRAY,
             ).apply { setPadding(0, dp(6), 0, 0) })
             addView(button("공유 설정 열기") { showSettings() }, margins(top = 8))
@@ -193,6 +194,10 @@ class FamilyActivity : Activity() {
         form.addView(button("공유 코드 복사 (가족에게 보내기)") {
             if (!FamilySync.configured(this)) toast("먼저 시트 주소를 넣고 저장해 주세요")
             else { copy("자동가계부 공유 코드", FamilySync.shareCode(this)); toast("복사했어요. 카카오톡으로 가족에게 보내세요") }
+        })
+        form.addView(button("아이폰·PC용 웹 보기 링크 복사") {
+            if (!FamilySync.configured(this)) toast("먼저 시트 주소를 넣고 저장해 주세요")
+            else { copy("자동가계부 가족 가계부 링크", FamilySync.webLink(this)); toast("복사했어요. 아이폰 사파리에서 열고 '홈 화면에 추가' 하세요") }
         })
         form.addView(button("지금까지 내역 모두 올리기") {
             if (!FamilySync.configured(this)) { toast("먼저 시트 주소를 넣고 저장해 주세요"); return@button }

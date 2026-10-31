@@ -55,6 +55,9 @@ object FamilySync {
     fun shareCode(c: Context): String =
         CODE_PREFIX + Base64.encodeToString("${url(c)}\n${key(c)}".toByteArray(), Base64.NO_WRAP)
 
+    /** 아이폰·PC 에서 사파리로 여는 가족 가계부 웹 화면 주소. */
+    fun webLink(c: Context): String = "${url(c)}?view=1&key=${key(c)}"
+
     /** 공유 코드를 풀어 (주소, 비밀번호). 형식이 틀리면 null. */
     fun parseCode(code: String): Pair<String, String>? {
         val body = code.trim().substringAfter(CODE_PREFIX, "").ifEmpty { return null }
@@ -234,9 +237,7 @@ function doPost(e) {
   }
 }
 
-function doGet(e) {
-  if (e.parameter.key !== SECRET) return out_({ ok: false, error: '비밀번호가 맞지 않아요' });
-  const from = Number(e.parameter.from || 0), to = Number(e.parameter.to || 9e15);
+function rows_(from, to) {
   const data = sheet_().getDataRange().getValues();
   const entries = [];
   for (let i = 1; i < data.length; i++) {
@@ -245,7 +246,96 @@ function doGet(e) {
     const t = Number(r[6]);
     if (t >= from && t < to) entries.push({ uid: r[0], owner: String(r[1]), kind: r[2], amount: Number(r[3]), memo: String(r[4]), card: String(r[5]), time: t });
   }
-  return out_({ ok: true, entries: entries });
+  return entries;
+}
+
+function doGet(e) {
+  const p = e.parameter;
+  if (p.key !== SECRET) {
+    return p.view ? HtmlService.createHtmlOutput('<p style="font-size:18px;padding:20px">링크가 올바르지 않아요. 공유 링크를 다시 받아 주세요.</p>')
+                  : out_({ ok: false, error: '비밀번호가 맞지 않아요' });
+  }
+  if (p.view) return page_(p);
+  return out_({ ok: true, entries: rows_(Number(p.from || 0), Number(p.to || 9e15)) });
+}
+
+// ---------------------------------------------------------------- 아이폰·PC 용 웹 화면 (?view=1&key=...)
+
+function won_(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '원'; }
+function esc_(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+function page_(p) {
+  const tz = 'Asia/Seoul';
+  const ym = /^\d{4}-\d{2}$/.test(p.m || '') ? p.m : Utilities.formatDate(new Date(), tz, 'yyyy-MM');
+  const y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7));
+  const from = Date.UTC(y, m - 1, 1) - 9 * 3600e3, to = Date.UTC(y, m, 1) - 9 * 3600e3;
+  const list = rows_(from, to).sort(function (a, b) { return b.time - a.time; });
+  const pad = function (n) { return (n < 10 ? '0' : '') + n; };
+  const prev = m === 1 ? (y - 1) + '-12' : y + '-' + pad(m - 1);
+  const next = m === 12 ? (y + 1) + '-01' : y + '-' + pad(m + 1);
+  const base = ScriptApp.getService().getUrl() + '?view=1&key=' + encodeURIComponent(SECRET) + '&m=';
+  const isBenefit = function (x) { return x.kind === 'INCOME' && x.memo.indexOf('카드 혜택') === 0; };
+
+  // 사람별 합계
+  const owners = {};
+  list.forEach(function (x) {
+    const o = owners[x.owner] || (owners[x.owner] = { inc: 0, exp: 0 });
+    if (x.kind === 'INCOME') o.inc += x.amount; else o.exp += x.amount;
+  });
+  let totalInc = 0, totalExp = 0, ownerHtml = '';
+  Object.keys(owners).forEach(function (k) {
+    totalInc += owners[k].inc; totalExp += owners[k].exp;
+    ownerHtml += '<div class="row"><b>' + esc_(k) + '</b><span><i class="in">수입 ' + won_(owners[k].inc) + '</i> · <i class="out">지출 ' + won_(owners[k].exp) + '</i></span></div>';
+  });
+
+  // 카드별 실제 지출 (결제 - 취소 - 혜택)
+  const cards = {};
+  list.forEach(function (x) {
+    if (x.kind !== 'EXPENSE' && !isBenefit(x)) return;
+    const name = x.card || '카드 정보 없음';
+    cards[name] = (cards[name] || 0) + (x.kind === 'EXPENSE' ? x.amount : -x.amount);
+  });
+  const cardHtml = Object.keys(cards).sort(function (a, b) { return cards[b] - cards[a]; }).map(function (k) {
+    return '<div class="row"><span>💳 ' + esc_(k) + '</span><b class="out">' + won_(cards[k]) + '</b></div>';
+  }).join('') || '<p class="sub">카드 사용 내역이 없어요.</p>';
+
+  // 날짜별 내역
+  const days = ['일', '월', '화', '수', '목', '금', '토'];
+  let listHtml = '', lastDay = '';
+  list.forEach(function (x) {
+    const d = new Date(x.time);
+    const day = Utilities.formatDate(d, tz, 'M월 d일') + ' (' + days[Number(Utilities.formatDate(d, tz, 'u')) % 7] + ')';
+    if (day !== lastDay) { listHtml += '<h3>' + day + '</h3>'; lastDay = day; }
+    const sign = x.kind === 'INCOME' ? '+' : (x.amount < 0 ? '취소 ' : '-');
+    const cls = x.kind === 'INCOME' ? 'in' : (x.amount < 0 ? 'sub' : 'out');
+    listHtml += '<div class="item"><div><div>' + esc_(x.memo) + '</div><div class="sub">' +
+      [Utilities.formatDate(d, tz, 'HH:mm'), esc_(x.owner), esc_(x.card)].filter(String).join(' · ') +
+      '</div></div><b class="' + cls + '">' + sign + won_(Math.abs(x.amount)) + '</b></div>';
+  });
+  if (!listHtml) listHtml = '<p class="sub">이번 달 내역이 없어요.</p>';
+
+  const html = '<!doctype html><html lang="ko"><head><meta charset="utf-8">' +
+    '<style>body{font-family:-apple-system,system-ui,sans-serif;margin:0;background:#fff;color:#14213d}' +
+    '.wrap{max-width:560px;margin:0 auto;padding:16px}' +
+    '.nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}' +
+    '.nav a{background:#e9ecf2;color:#14213d;text-decoration:none;padding:10px 16px;border-radius:10px;font-weight:700}' +
+    '.nav b{font-size:20px}.card{background:#f2f4f7;border-radius:14px;padding:12px 14px;margin-bottom:12px}' +
+    '.row{display:flex;justify-content:space-between;gap:8px;padding:5px 0;font-size:15px}.row i{font-style:normal}' +
+    '.total{border-top:1px solid #d9dee7;margin-top:6px;padding-top:8px;font-size:17px}' +
+    'h2{font-size:17px;margin:18px 0 8px}h3{font-size:13px;color:#6b7280;margin:16px 0 4px}' +
+    '.item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f1f3f6;font-size:15px}' +
+    '.sub{color:#6b7280;font-size:12px}.in{color:#1e6fd9}.out{color:#d93025}' +
+    '.refresh{display:block;text-align:center;background:#1e6fd9;color:#fff;text-decoration:none;padding:12px;border-radius:12px;font-weight:700;margin:4px 0 14px}</style>' +
+    '</head><body><div class="wrap">' +
+    '<div class="nav"><a target="_top" href="' + base + prev + '">◀</a><b>' + y + '년 ' + m + '월</b><a target="_top" href="' + base + next + '">▶</a></div>' +
+    '<a class="refresh" target="_top" href="' + base + ym + '">새로고침</a>' +
+    '<div class="card">' + (ownerHtml || '<p class="sub">아직 올라온 내역이 없어요.</p>') +
+    '<div class="row total"><b>가족 합계</b><b>남은 돈 ' + won_(totalInc - totalExp) + '</b></div></div>' +
+    '<h2>카드별 실제 지출</h2><div class="card">' + cardHtml + '</div>' +
+    '<h2>내역</h2>' + listHtml +
+    '<p class="sub" style="margin-top:20px">' + Utilities.formatDate(new Date(), tz, 'M/d HH:mm') + ' 기준 · 자동가계부</p>' +
+    '</div></body></html>';
+  return HtmlService.createHtmlOutput(html).setTitle('가족 가계부').addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 """.trimIndent()
 }
