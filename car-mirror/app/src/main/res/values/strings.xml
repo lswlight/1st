@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">CarMirror</string>
-    <string name="touch_service_label">CarMirror 터치 제어</string>
-    <string name="touch_service_desc">차량 화면에서 누른 위치를 휴대폰 화면 터치로 전달합니다. 정차 중에만 동작하며, 화면 내용을 읽거나 저장하지 않습니다.</string>
-</resources>

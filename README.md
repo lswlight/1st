@@ -61,7 +61,3 @@ Higgsfield 이미지·영상 생성과 `virality_predictor`도 요청할 때만 
 - Gemini 무료 등급은 하루 요청 수와 분당 토큰에 한도가 있습니다. 긴 영상은 `--low-res` 나 `--start/--end` 로 나눠 분석합니다.
 - 공개 또는 일부 공개 영상만 Gemini API로 분석할 수 있습니다.
 - 이미지·영상 생성은 Higgsfield 크레딧을 씁니다. 스킬은 프롬프트까지만 만들고, 실제 생성은 요청할 때만 실행합니다.
-
-## 기타: CarMirror (개인용 안드로이드 오토 미러링 앱)
-
-유튜브 분석 스킬과 별개로, 휴대폰 화면을 안드로이드 오토 차량 화면에 띄우는 개인용 앱 소스를 `car-mirror/` 에 둡니다. 정차 중에만 화면이 표시됩니다. 빌드·설치 방법: [car-mirror/README.md](car-mirror/README.md)
