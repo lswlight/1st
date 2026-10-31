@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 해외 결제 환산용 환율을 하루 한 번 받는다 (환율표 요청만 보내고 결제 내역은 보내지 않음) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- 알림을 보낸 앱의 이름(예: 하나카드)을 읽기 위해 설치된 앱 목록을 볼 수 있게 한다 -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="자동가계부"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".StatsActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:label="달력 · 그래프" />
+
+        <activity
+            android:name=".FamilyActivity"
+            android:exported="false"
+            android:label="가족 가계부"
+            android:parentActivityName=".MainActivity" />
+
+        <!-- 카드 결제 알림 감지. 설정 > 알림 접근에서 허용해야 동작한다. -->
+        <service
+            android:name=".CardNotificationListener"
+            android:exported="true"
+            android:label="자동가계부 카드 알림 감지"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

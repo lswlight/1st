@@ -1,0 +1,256 @@
+package com.lswlight.moneybook
+
+import java.time.LocalDateTime
+
+/** 카드 승인/취소 알림 한 건을 해석한 결과. */
+data class ParsedPayment(
+    val amount: Long,          // 원 단위, 항상 양수
+    val isCancel: Boolean,     // 승인 취소(환불)면 true
+    val merchant: String,      // 가맹점 (못 찾으면 "카드 결제")
+    val card: String,          // 카드사 (못 찾으면 빈 문자열)
+    val time: LocalDateTime?,  // 메시지에 적힌 결제 시각 (없으면 null)
+    val foreign: String = "",  // 해외 결제의 원래 금액 (예: "JPY 2,280"), 이때 amount 는 원화 환산 추정치
+    val rate: Double = 0.0,    // 환산에 쓴 외화 1단위당 원화
+    val feePercent: Double = 0.0, // 환산 금액에 더한 해외 이용 수수료율
+    val isBenefit: Boolean = false, // 할인·캐시백처럼 금액 앞에 - 가 붙어 온 혜택이면 true (수입으로 기록)
+) {
+    /** 내역에 남길 내용. 해외 결제면 원래 금액과 환산 근거를 함께 적는다. */
+    fun memo(): String {
+        if (isBenefit) return "카드 혜택: $merchant"
+        if (foreign.isEmpty()) return merchant
+        val fee = if (feePercent > 0) " + 수수료 ${"%.2f".format(feePercent).trimEnd('0').trimEnd('.')}%" else ""
+        return "$merchant ($foreign × ${"%,.2f".format(rate)}원$fee, 추정)"
+    }
+}
+
+/**
+ * 카드사 문자, 카카오톡 알림톡, 카드 앱 푸시 문구에서 금액·가맹점·카드사를 뽑는다.
+ * 안드로이드 의존성이 없어서 JVM 단위 테스트로 바로 검증할 수 있다.
+ */
+object CardMessageParser {
+
+    private val AMOUNT = Regex("""(?<![\d,.])(\d{1,3}(?:,\d{3})+|\d+)\s*원""")
+    private val DATE_TIME = Regex("""(\d{1,2})\s*[/.월]\s*(\d{1,2})\s*일?\s+(\d{1,2}):(\d{2})""")
+    private val CARD = Regex(
+        """(KB국민|국민|신한|현대|삼성|롯데|하나|우리|NH농협|농협|NH|BC|비씨|씨티|IBK기업|IBK|기업|카카오뱅크|토스뱅크|토스|케이뱅크|수협|광주|전북|제주)\s*(?:카드|체크)"""
+    )
+    // "삼성1234승인" 처럼 카드 단어 없이 카드사 이름 뒤에 카드번호가 붙는 문자
+    private val CARD_SHORT = Regex("""(KB국민|국민|신한|현대|삼성|롯데|하나|우리|NH|농협|BC|씨티)\d""")
+    // 해외 결제 금액: "JPY 2,280", "USD 12.50"
+    val CURRENCIES = listOf(
+        "USD", "JPY", "EUR", "CNY", "GBP", "HKD", "SGD", "AUD", "CAD", "CHF",
+        "THB", "VND", "TWD", "PHP", "NZD", "MYR", "IDR",
+    )
+    // "33.83(USD)", "31.85 달러" 처럼 숫자 뒤에 통화가 오는 형식 (KB국민·신한 해외승인 문자)
+    private val FOREIGN_SUFFIX = Regex("""(?<![\d,.])(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*\(?\s*(${CURRENCIES.joinToString("|")}|달러|엔|유로|위안|파운드)(?![A-Za-z])\)?""")
+    private val CURRENCY_WORD = mapOf("달러" to "USD", "엔" to "JPY", "유로" to "EUR", "위안" to "CNY", "파운드" to "GBP")
+
+    /** 외화 금액 (통화 코드, 숫자 문자열). "USD 12.50", "33.83(USD)", "31.85 달러" 모두 읽는다. */
+    private fun findForeign(body: String): Pair<String, String>? {
+        FOREIGN.find(body)?.let { return it.groupValues[1] to it.groupValues[2] }
+        FOREIGN_SUFFIX.find(body)?.let { m ->
+            val unit = m.groupValues[2]
+            return (CURRENCY_WORD[unit] ?: unit) to m.groupValues[1]
+        }
+        return null
+    }
+
+    private val FOREIGN = Regex("""(?<![A-Z])(${CURRENCIES.joinToString("|")})\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)""")
+
+    // 외화 1단위당 대략적인 원화. 받아 둔 환율이 없을 때(인터넷 안 됨 등)만 쓴다
+    val FALLBACK_KRW_PER_UNIT = mapOf(
+        "USD" to 1400.0, "JPY" to 9.3, "EUR" to 1600.0, "CNY" to 195.0, "GBP" to 1850.0,
+        "HKD" to 180.0, "SGD" to 1080.0, "AUD" to 920.0, "CAD" to 1010.0, "CHF" to 1750.0,
+        "THB" to 42.0, "VND" to 0.055, "TWD" to 45.0, "PHP" to 24.0, "NZD" to 830.0,
+        "MYR" to 330.0, "IDR" to 0.085,
+    )
+
+    private val MERCHANT_LABEL = Regex("""(?:이용가맹점|가맹점명|가맹점|사용처|이용처)\s*[:：]?\s*([^\n]+)""")
+    private val TOSS_STYLE = Regex("""^(.+?)에서\s*[\d,]+\s*원""", RegexOption.MULTILINE)
+
+    // 이 단어 바로 뒤의 금액은 결제 금액이 아니다 (누적 사용액, 잔액, 한도 등)
+    // 혜택 금액 앞에 붙는 단어. "할인 -1,500원" 처럼 - 가 함께 있으면 건너뛰지 않고 혜택으로 읽는다
+    private val BENEFIT_PREFIX = Regex("""(할인|캐시백|적립|청구할인|혜택)[^\n\d]{0,6}$""")
+    private val BENEFIT_WORD = Regex("""할인|캐시백|적립|혜택""")
+    private val MINUS_AMOUNT = Regex("""[-−－]\s*\d[\d,]*\s*원""")
+    private val MINUS_BEFORE = Regex("""[-−－]\s*$""")
+
+    private val POINT_SUFFIX = Regex("""^[^\d]{0,8}(적립|포인트|마일리지)""")
+
+    private val NOT_PAYMENT_PREFIX = Regex("""(누적|잔액|한도|포인트|적립|캐시백|할인|청구)[^\n\d]{0,6}$""")
+
+    // 결제가 아닌 안내 문자 (거절, 청구서, 광고 등)
+    // 적립 안내만 있는 알림 (예: 토스 "페이스페이 · 최대 7% 적립 … 4,360원 적립됐어요")
+    private val POINT_NOTICE = Regex("""적립\s*(됐|되었|완료|예정|해\s*드렸|받았|했어요)""")
+
+    private val EXCLUDE = Regex("""승인\s*거절|거절|결제\s*예정|결제\s*대금|청구\s*금액|명세서|연체|이용\s*대금|출금\s*예정|\(광고\)|인증번호|\[입금]|입금되었습니다""")
+    // 출금: 은행 앱의 체크카드·계좌 출금 알림 (예: MG새마을금고 "[출금] 18,500원 ... 양천돈까스")
+    private val PAYMENT_WORD = Regex("""승인|결제|사용|일시불|할부|취소|출금""")
+    private val CARD_APPROVAL = Regex("""승인|결제|카드|체크""")
+    private val AUTO_DEBIT = Regex("""자동\s*이체|자동\s*납부|자동\s*출금""")
+
+    // 은행 출금 알림 (문자·카카오톡으로 받은 경우): 은행 이름 + 출금 + 잔액이 모두 있어야 인정 (일반 대화와 구분)
+    private val BANK_NAME = Regex("""은행|금고|뱅크|신협|우체국|농협|수협""")
+    private fun isBankWithdrawal(body: String) =
+        BANK_NAME.containsMatchIn(body) && body.contains("출금") && body.contains("잔액")
+
+    private val CARD_CONTEXT = Regex("""카드|체크|\[KB]|[Pp]ay|페이""")
+
+    /**
+     * @param text 알림 제목과 본문을 줄바꿈으로 이은 문자열
+     * @param now  연도를 정하는 기준 시각
+     * @param trustedSource 카드사 앱처럼 결제 알림만 보내는 앱이면 true (카드 단어가 없어도 인정)
+     * @param rates 외화 1단위당 원화 (인터넷에서 받아 둔 환율). 없는 통화는 고정 추정치를 쓴다
+     * @param feePercent 해외 결제 환산 금액에 더할 수수료율 (예: 1.4)
+     */
+    fun parse(
+        text: String,
+        now: LocalDateTime = LocalDateTime.now(),
+        trustedSource: Boolean = false,
+        rates: Map<String, Double> = emptyMap(),
+        feePercent: Double = 0.0,
+    ): ParsedPayment? {
+        val body = text.replace("\r", "").lines().joinToString("\n") { it.trim() }.trim()
+        if (body.isEmpty() || EXCLUDE.containsMatchIn(body)) return null
+        // 승인 문구 없이 적립 안내만 있으면 기록하지 않는다
+        if (POINT_NOTICE.containsMatchIn(body) && !body.contains("승인")) return null
+        // 은행 계좌 출금 알림은 기록하지 않는다. 체크카드 결제는 은행이 따로 보내는 "체크카드 … 승인" 알림으로 기록되고,
+        // 카드 승인이 없는 출금은 계좌 이체·송금·ATM 출금이기 때문. 자동이체(통신비·관리비 등)만 지출로 남긴다
+        if (body.contains("출금") && !CARD_APPROVAL.containsMatchIn(body) && !AUTO_DEBIT.containsMatchIn(body)) return null
+        // "승인/결제" 단어가 없어도 "캐시백 -2,000원" 처럼 - 붙은 혜택 금액이면 인정한다
+        val benefitNotice = BENEFIT_WORD.containsMatchIn(body) && MINUS_AMOUNT.containsMatchIn(body)
+        if (!PAYMENT_WORD.containsMatchIn(body) && !benefitNotice) return null
+        if (!trustedSource && !CARD_CONTEXT.containsMatchIn(body) && !CARD_SHORT.containsMatchIn(body) && !isBankWithdrawal(body)) return null
+
+        // 원화 금액이 있으면 그대로, 없으면 외화 금액을 원화로 환산한다
+        val (krw, minus) = findAmount(body) ?: (null to false)
+        val foreign = if (krw == null) findForeign(body) else null
+        val rate = foreign?.let { rates[it.first] ?: FALLBACK_KRW_PER_UNIT[it.first] } ?: 0.0
+        val amount = krw ?: foreign?.let { toKrw(it.second, rate * (1 + feePercent / 100)) } ?: return null
+        val card = (CARD.find(body) ?: CARD_SHORT.find(body))?.let { normalizeCard(it.groupValues[1]) }
+            ?: if (body.contains("[KB]")) "KB국민카드" else ""
+
+        return ParsedPayment(
+            amount = amount,
+            isCancel = body.contains("취소"),
+            // 취소 문자의 - 는 환불이므로 혜택이 아니다
+            isBenefit = minus && !body.contains("취소"),
+            merchant = findMerchant(body).ifEmpty { "카드 결제" },
+            card = card,
+            time = findTime(body, now),
+            foreign = foreign?.let { "${it.first} ${it.second}" }.orEmpty(),
+            rate = rate,
+            feePercent = if (foreign != null) feePercent else 0.0,
+        )
+    }
+
+    /**
+     * 은행 입금 알림이면 입금 금액, 아니면 null. (입금은 기록하지 않지만,
+     * 같은 금액의 출금과 짝을 지어 "내 계좌끼리 옮긴 돈" 을 알아내는 데 쓴다)
+     */
+    fun depositAmount(text: String): Long? {
+        val body = text.replace("\r", "")
+        if (!DEPOSIT.containsMatchIn(body) || body.contains("출금")) return null
+        return findAmount(body)?.first
+    }
+
+    private val DEPOSIT = Regex("""\[입금]|입금되었습니다|입금\s+\d""")
+
+    private fun toKrw(value: String, krwPerUnit: Double): Long? {
+        val v = value.replace(",", "").toDoubleOrNull() ?: return null
+        val krw = Math.round(v * krwPerUnit)
+        return if (krw > 0) krw else null
+    }
+
+    /** 결제 금액과, 금액 앞에 - 가 붙어 있었는지(할인·캐시백 혜택). */
+    private fun findAmount(body: String): Pair<Long, Boolean>? {
+        for (m in AMOUNT.findAll(body)) {
+            val before = body.substring(0, m.range.first).substringAfterLast('\n')
+            val minus = MINUS_BEFORE.containsMatchIn(before)
+            val benefitWord = BENEFIT_PREFIX.containsMatchIn(before)
+            if (NOT_PAYMENT_PREFIX.containsMatchIn(before) && !(minus && benefitWord)) continue
+            // "4,360원 적립", "500원 포인트 적립 예정" 처럼 금액 뒤에 적립이 붙으면 쓴 돈이 아니다
+            val after = body.substring(m.range.last + 1).substringBefore('\n')
+            if (POINT_SUFFIX.containsMatchIn(after)) continue
+            val value = m.groupValues[1].replace(",", "").toLongOrNull() ?: continue
+            if (value > 0) return value to minus
+        }
+        return null
+    }
+
+    private fun findTime(body: String, now: LocalDateTime): LocalDateTime? {
+        val m = DATE_TIME.find(body) ?: return null
+        val (month, day, hour, minute) = m.destructured.toList().map { it.toInt() }
+        return try {
+            val t = LocalDateTime.of(now.year, month, day, hour, minute)
+            // 1월에 받은 12월 결제 문자처럼 미래로 계산되면 작년으로 본다
+            if (t.isAfter(now.plusDays(1))) t.minusYears(1) else t
+        } catch (e: java.time.DateTimeException) {
+            null
+        }
+    }
+
+    private fun findMerchant(body: String): String {
+        MERCHANT_LABEL.find(body)?.let { return clean(it.groupValues[1]) }
+        TOSS_STYLE.find(body)?.let { return clean(it.groupValues[1]) }
+
+        // "10/27 12:34 스타벅스" 처럼 시각 뒤에 가맹점이 붙는 문자
+        DATE_TIME.find(body)?.let { m ->
+            val rest = clean(body.substring(m.range.last + 1).substringBefore('\n'))
+            if (rest.isNotEmpty()) return rest
+        }
+
+        // "고객명 이*우님", "승인시각 10/30 06:16" 같은 항목 줄은 가맹점이 아니다
+        val lines = body.lines().filterNot { INFO_LINE.containsMatchIn(it) }
+        // 금액 줄 바로 다음에 가맹점이 오는 문자가 많다 (KB국민카드 "50,000 원(일시불)" 다음 줄 "미소가득주유소")
+        val amountLine = lines.indexOfFirst { AMOUNT.containsMatchIn(it) && !NOT_PAYMENT_LINE.containsMatchIn(it) }
+        if (amountLine >= 0) {
+            lines.drop(amountLine + 1).map { clean(it) }.firstOrNull { it.isNotEmpty() }?.let { return it }
+        }
+        // 나머지는 줄마다 군더더기를 지우고 마지막으로 남는 글자를 가맹점으로 본다
+        return lines.map { clean(it) }.lastOrNull { it.isNotEmpty() } ?: ""
+    }
+
+    private val INFO_LINE = Regex("""^(고객명|승인시각|승인일시|거래일시|이용일시|일시|시각|카드명|이용카드|결제방법|할부개월)\s""")
+    private val NOT_PAYMENT_LINE = Regex("""^(누적|잔액|총누적|한도)""")
+
+    private val CLEAN_PATTERNS = listOf(
+        Regex("""\[[^\]]*]"""),                    // [Web발신], [신한카드]
+        Regex("""(누적|잔액|총누적).*"""),           // 누적 1,234,567원 이후 전부
+        Regex("""\d[\d*]*(?:-[\d*]+)+\S*"""),        // 계좌번호 1002-938-235***계좌, 9003-2963-****-1
+        DATE_TIME,
+        FOREIGN,                                   // "USD 9.99" 가 날짜 규칙에 먹히기 전에 지운다
+        FOREIGN_SUFFIX,                            // "33.83(USD)", "31.85 달러"
+        Regex("""\([A-Z]{2}\)"""),                // 나라 코드 (LU)
+        Regex("""^[가-힣]{1,3}\s{2,}(?=[A-Za-z])"""),  // 나라 줄임말 "네덜   ALIEXPRESS"
+        Regex("""\d{1,2}[/.]\d{1,2}"""),          // 날짜만 있는 경우
+        Regex("""\d{1,2}:\d{2}(:\d{2})?"""),       // 시각만 있는 경우
+        AMOUNT,
+        Regex("""\(?일시불\)?|\(?\d+\s*개월\)?|할부|전자금융"""),
+        Regex("""\S*(카드|체크)\S*"""),              // 신한카드(1234)승인
+        Regex("""\S*${CARD_SHORT.pattern}\S*"""),  // 삼성1234승인
+        Regex("""\(?\d+\*[\d*]*\)?"""),            // 카드번호 1*2*, (1*2*)
+        Regex("""\S*[가-힣]\*[가-힣]?\S*"""),          // 홍*동님 (GOOGLE*YOUTUBE 같은 가맹점은 남긴다)
+        Regex("""\S+님"""),
+        Regex("""결제로\s*처리되었습니다|처리되었습니다|해외|국내|신용"""),
+        Regex("""승인|취소|사용|결제|완료|되었습니다|했어요"""),
+        Regex("""\(\d*\)"""),
+        Regex("""/"""),                            // 하나카드 앱: "해외/승인/JPY 2,280/가맹점"
+    )
+
+    private fun clean(s: String): String {
+        var out = s
+        for (p in CLEAN_PATTERNS) out = p.replace(out, " ")
+        out = out.replace(Regex("""\s+"""), " ").trim().trim('-', ':', '：', '|', '/', '·', ',', '.', ' ')
+        // 한글이나 영문이 한 글자도 없으면 가맹점이 아니다
+        return if (out.any { it.isLetter() }) out else ""
+    }
+
+    private fun normalizeCard(name: String) = when (name) {
+        "국민", "KB국민" -> "KB국민카드"
+        "농협", "NH", "NH농협" -> "NH농협카드"
+        "비씨", "BC" -> "BC카드"
+        "IBK", "기업", "IBK기업" -> "IBK기업카드"
+        else -> "${name}카드"
+    }
+}

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 15 부터는 화면이 상단 제목 줄 밑까지 그려져(edge-to-edge) 내용이 가려지므로, 기존처럼 제목 줄 아래부터 그리게 한다 -->
+    <style name="AppTheme" parent="android:Theme.Material.Light.DarkActionBar">
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+    </style>
+</resources>
