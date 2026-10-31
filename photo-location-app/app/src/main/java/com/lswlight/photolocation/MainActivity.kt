@@ -46,6 +46,8 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -94,6 +96,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -284,6 +287,9 @@ private fun App(vm: GalleryViewModel = viewModel()) {
             BackHandler { openPhotoId = null }
             PhotoScreen(
                 photo,
+                // 같은 분기 폴더의 사진들 사이를 좌우로 넘긴다.
+                photos = month.second,
+                onPageChanged = { openPhotoId = it.id },
                 onBack = { openPhotoId = null },
                 onDelete = { vm.deleteItems(listOf(photo)) },
                 onSetHome = {
@@ -1140,6 +1146,8 @@ private fun GroupScreen(
 @Composable
 private fun PhotoScreen(
     photo: Photo,
+    photos: List<Photo>,
+    onPageChanged: (Photo) -> Unit,
     onBack: () -> Unit,
     onDelete: () -> Unit,
     onSetHome: () -> Unit,
@@ -1171,19 +1179,33 @@ private fun PhotoScreen(
             )
         },
     ) { padding ->
+        // 목록이 바뀌면(삭제 등) 지금 사진 위치에서 다시 시작한다.
+        val pagerState = rememberPagerState(initialPage = photos.indexOf(photo).coerceAtLeast(0)) { photos.size }
+        LaunchedEffect(pagerState, photos) {
+            snapshotFlow { pagerState.currentPage }.collect { page ->
+                photos.getOrNull(page)?.let(onPageChanged)
+            }
+        }
         Column(Modifier.padding(padding).fillMaxSize()) {
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                AsyncImage(
-                    model = photo.uri,
-                    contentDescription = photo.name,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                if (photo.isVideo) {
-                    PlayBadge(
-                        Modifier.align(Alignment.Center).size(72.dp)
-                            .clickable { openInGallery(context, photo.uri, video = true) }
+            HorizontalPager(
+                state = pagerState,
+                key = { photos[it].id },
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            ) { page ->
+                val item = photos[page]
+                Box(Modifier.fillMaxSize()) {
+                    AsyncImage(
+                        model = item.uri,
+                        contentDescription = item.name,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize(),
                     )
+                    if (item.isVideo) {
+                        PlayBadge(
+                            Modifier.align(Alignment.Center).size(72.dp)
+                                .clickable { openInGallery(context, item.uri, video = true) }
+                        )
+                    }
                 }
             }
             Column(Modifier.padding(16.dp)) {
