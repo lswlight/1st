@@ -54,6 +54,10 @@ public final class MirrorController implements ParkingGuard.Listener {
 	private volatile boolean locked = true;
 	private volatile int carWidth;
 	private volatile int carHeight;
+	/** true 면 독립 화면 모드(실험): 휴대폰 화면 복사가 아니라 별도 가상 화면에 앱을 띄운다. */
+	private volatile boolean independent;
+	private volatile int displayId = -1;
+	private volatile String lastError;
 
 	// 아래 필드는 handler 스레드에서만 접근한다.
 	private MediaProjection projection;
@@ -96,6 +100,19 @@ public final class MirrorController implements ParkingGuard.Listener {
 		return locked;
 	}
 
+	public boolean isIndependent() {
+		return independent;
+	}
+
+	/** 독립 화면 모드에서 차량용 가상 화면의 ID. 아직 없으면 -1. */
+	public int getDisplayId() {
+		return displayId;
+	}
+
+	public String getLastError() {
+		return lastError;
+	}
+
 	public void addStatusListener(StatusListener l) {
 		statusListeners.add(l);
 	}
@@ -107,11 +124,13 @@ public final class MirrorController implements ParkingGuard.Listener {
 	// ---------------------------------------------------------------- 휴대폰 화면 캡처
 
 	/** 콜백이 이미 등록된 MediaProjection 을 넘긴다 (안드로이드 14 이상 요구사항). */
-	public void setProjection(MediaProjection p) {
+	public void setProjection(MediaProjection p, boolean independentMode) {
 		handler.post(() -> {
 			if (projection != null && projection != p) stopProjectionInternal();
 			projection = p;
 			projecting = p != null;
+			independent = independentMode;
+			lastError = null;
 			ensureDisplay();
 			redraw();
 			notifyStatus();
@@ -195,15 +214,25 @@ public final class MirrorController implements ParkingGuard.Listener {
 			if (virtualDisplay == null) {
 				// 안드로이드 14 이상은 프로젝션 하나당 VirtualDisplay 를 한 번만 만들 수 있다.
 				// 차량 화면 크기가 바뀌면 resize/setSurface 로 재사용한다.
+				int flags = independent
+						? DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC
+						| DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
+						| DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION
+						: DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR;
 				virtualDisplay = projection.createVirtualDisplay("CarMirror", carWidth, carHeight,
-						carDpi, DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, reader.getSurface(),
-						null, handler);
+						carDpi, flags, reader.getSurface(), null, handler);
+				if (virtualDisplay != null && virtualDisplay.getDisplay() != null) {
+					displayId = virtualDisplay.getDisplay().getDisplayId();
+					Log.i(TAG, "VirtualDisplay 생성: id=" + displayId + " flags="
+							+ virtualDisplay.getDisplay().getFlags() + " independent=" + independent);
+				}
 			} else {
 				virtualDisplay.resize(carWidth, carHeight, carDpi);
 				virtualDisplay.setSurface(reader.getSurface());
 			}
 		} catch (RuntimeException e) {
 			Log.e(TAG, "VirtualDisplay 생성 실패", e);
+			lastError = "가상 화면 생성 실패: " + e;
 		}
 	}
 
@@ -222,6 +251,7 @@ public final class MirrorController implements ParkingGuard.Listener {
 			virtualDisplay.release();
 			virtualDisplay = null;
 		}
+		displayId = -1;
 	}
 
 	private void onImageAvailable(ImageReader r) {
@@ -278,6 +308,8 @@ public final class MirrorController implements ParkingGuard.Listener {
 			}
 		} else if (hasFrame) {
 			drawFrame();
+		} else if (independent) {
+			drawMessage("독립 화면 준비됨 (실험)", "휴대폰 CarMirror 앱에서 띄울 앱을 고르세요");
 		} else {
 			drawMessage("휴대폰 화면을 기다리는 중…", "");
 		}
@@ -356,6 +388,8 @@ public final class MirrorController implements ParkingGuard.Listener {
 		int cw = carWidth;
 		int ch = carHeight;
 		if (ctx == null || cw <= 0 || ch <= 0) return null;
+		// 독립 화면은 차량 화면과 크기가 같으므로 좌표가 1:1 이다.
+		if (independent) return new float[]{1f, 0f, 0f, cw, ch};
 		DisplayManager dm = ctx.getSystemService(DisplayManager.class);
 		Display d = dm.getDisplay(Display.DEFAULT_DISPLAY);
 		if (d == null) return null;

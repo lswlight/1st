@@ -2,6 +2,7 @@ package com.lsw.carmirror;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Typeface;
@@ -28,6 +29,8 @@ public class MainActivity extends Activity
 	private static final int REQ_CAPTURE = 2;
 
 	private TextView status;
+	private TextView launchResult;
+	private boolean pendingIndependent;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -49,10 +52,22 @@ public class MainActivity extends Activity
 		status.setPadding(0, dp(16), 0, dp(16));
 		root.addView(status);
 
-		root.addView(button("① 미러링 시작", v -> startMirroring()));
+		root.addView(button("① 미러링 시작", v -> startMirroring(false)));
 		root.addView(button("미러링 중지", v -> ProjectionService.stop(this)));
 		root.addView(button("② 터치 제어 켜기 (접근성 설정 열기)", v -> openAccessibility()));
 		root.addView(button("접근성이 회색으로 막혀 있으면: 앱 정보 열기", v -> openAppInfo()));
+
+		TextView expTitle = text("\n독립 화면 모드 (실험)", 18);
+		expTitle.setTypeface(Typeface.DEFAULT_BOLD);
+		root.addView(expTitle);
+		root.addView(text("휴대폰 화면과 별개로 차량 화면에 앱을 띄웁니다. 안드로이드가 막을 수 있어 "
+				+ "실험 기능입니다. 미러링 중이면 먼저 [미러링 중지]를 누르세요.", 14));
+		root.addView(button("독립 화면 시작 (실험)", v -> startMirroring(true)));
+		root.addView(button("1) 테스트 화면 띄우기", v -> showResult(DisplayLauncher.launchTest(this))));
+		root.addView(button("2) 앱 골라서 띄우기", v -> pickApp()));
+		launchResult = text("", 14);
+		launchResult.setPadding(0, dp(8), 0, 0);
+		root.addView(launchResult);
 
 		root.addView(text("\n사용 순서\n"
 				+ "1. 차량에 연결하고 안드로이드 오토에서 CarMirror 를 엽니다.\n"
@@ -111,12 +126,16 @@ public class MainActivity extends Activity
 				+ "\n차량 화면: " + (mc.isCarConnected() ? "연결됨" : "연결 안 됨")
 				+ "\n정차 판정: " + parking
 				+ "\n위치 권한: " + (hasLocation() ? "허용" : "필요")
-				+ "\n터치 제어: " + (TouchService.isEnabled() ? "켜짐" : "꺼짐"));
+				+ "\n터치 제어: " + (TouchService.isEnabled() ? "켜짐" : "꺼짐")
+				+ (mc.isIndependent() && mc.isProjecting()
+				? "\n독립 화면 ID: " + (mc.getDisplayId() >= 0 ? mc.getDisplayId() : "차량 연결 대기") : "")
+				+ (mc.getLastError() != null ? "\n오류: " + mc.getLastError() : ""));
 	}
 
 	// ---------------------------------------------------------------- 미러링 시작
 
-	private void startMirroring() {
+	private void startMirroring(boolean independent) {
+		pendingIndependent = independent;
 		List<String> need = new ArrayList<>();
 		if (!hasLocation()) {
 			need.add(Manifest.permission.ACCESS_FINE_LOCATION);
@@ -160,8 +179,27 @@ public class MainActivity extends Activity
 		}
 		Intent svc = new Intent(this, ProjectionService.class)
 				.putExtra(ProjectionService.EXTRA_RESULT_CODE, resultCode)
-				.putExtra(ProjectionService.EXTRA_RESULT_DATA, data);
+				.putExtra(ProjectionService.EXTRA_RESULT_DATA, data)
+				.putExtra(ProjectionService.EXTRA_INDEPENDENT, pendingIndependent);
 		startForegroundService(svc);
+	}
+
+	// ---------------------------------------------------------------- 독립 화면 모드
+
+	private void pickApp() {
+		List<DisplayLauncher.AppEntry> apps = DisplayLauncher.listApps(this);
+		String[] labels = new String[apps.size()];
+		for (int i = 0; i < labels.length; i++) labels[i] = apps.get(i).label;
+		new AlertDialog.Builder(this)
+				.setTitle("차량 화면에 띄울 앱")
+				.setItems(labels, (d, which) ->
+						showResult(DisplayLauncher.launchApp(this, apps.get(which))))
+				.show();
+	}
+
+	private void showResult(String msg) {
+		launchResult.setText(msg);
+		refresh();
 	}
 
 	// ---------------------------------------------------------------- 설정 화면 이동

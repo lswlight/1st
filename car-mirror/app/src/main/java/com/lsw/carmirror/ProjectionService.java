@@ -22,6 +22,7 @@ public class ProjectionService extends Service {
 	private static final String TAG = "ProjectionService";
 	static final String EXTRA_RESULT_CODE = "resultCode";
 	static final String EXTRA_RESULT_DATA = "resultData";
+	static final String EXTRA_INDEPENDENT = "independent";
 	static final String ACTION_STOP = "com.lsw.carmirror.STOP";
 	private static final String CHANNEL_ID = "mirror";
 	private static final int NOTIFICATION_ID = 1;
@@ -75,7 +76,8 @@ public class ProjectionService extends Service {
 			}
 		}, new Handler(Looper.getMainLooper()));
 
-		MirrorController.get().init(this).setProjection(p);
+		MirrorController.get().init(this)
+				.setProjection(p, intent.getBooleanExtra(EXTRA_INDEPENDENT, false));
 		if (!gpsStarted) {
 			ParkingGuard.get().startGps(this);
 			gpsStarted = true;
@@ -118,7 +120,7 @@ public class ProjectionService extends Service {
 
 		Notification n = new Notification.Builder(this, CHANNEL_ID)
 				.setSmallIcon(android.R.drawable.ic_menu_slideshow)
-				.setContentTitle("CarMirror 미러링 중")
+				.setContentTitle("CarMirror 실행 중")
 				.setContentText("주행 중에는 차량 화면이 자동으로 가려집니다")
 				.setContentIntent(open)
 				.addAction(new Notification.Action.Builder(null, "중지", stop).build())

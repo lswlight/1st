@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;
 import android.content.Intent;
 import android.graphics.Path;
+import android.os.Build;
 import android.view.accessibility.AccessibilityEvent;
 
 /** 차량 화면에서 받은 터치를 휴대폰 화면 제스처로 전달하는 접근성 서비스. */
@@ -74,9 +75,14 @@ public class TouchService extends AccessibilityService {
 		if (MirrorController.get().isLocked()) return;
 		TouchService s = instance;
 		if (s == null) return;
-		GestureDescription g = new GestureDescription.Builder()
-				.addStroke(new GestureDescription.StrokeDescription(path, 0, durationMs))
-				.build();
+		GestureDescription.Builder b = new GestureDescription.Builder()
+				.addStroke(new GestureDescription.StrokeDescription(path, 0, durationMs));
+		// 독립 화면 모드에서는 차량용 가상 화면에 터치를 보낸다 (안드로이드 11 이상).
+		MirrorController mc = MirrorController.get();
+		if (mc.isIndependent() && mc.getDisplayId() >= 0 && Build.VERSION.SDK_INT >= 30) {
+			b.setDisplayId(mc.getDisplayId());
+		}
+		GestureDescription g = b.build();
 		s.dispatchGesture(g, null, null);
 	}
 }

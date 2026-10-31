@@ -16,6 +16,14 @@
     <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
     <uses-permission android:name="androidx.car.app.NAVIGATION_TEMPLATES" />
 
+    <!-- 독립 화면 모드: 차량 화면에 띄울 앱 목록 조회 -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="false"
         android:icon="@drawable/ic_launcher"
@@ -38,6 +46,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 독립 화면 모드 자체 테스트용 화면. 가상 화면에 띄울 수 있도록 allowEmbedded. -->
+        <activity
+            android:name=".TestDisplayActivity"
+            android:allowEmbedded="true"
+            android:exported="false"
+            android:resizeableActivity="true" />
 
         <!-- 안드로이드 오토 진입점. 자유 화면(Surface)을 쓰려면 NAVIGATION 카테고리여야 한다. -->
         <service
