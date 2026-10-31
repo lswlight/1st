@@ -44,7 +44,27 @@
 
 로컬 빌드: Android SDK가 있는 PC에서 `cd car-mirror && gradle assembleRelease`
 
-## 설치 (PC + adb)
+휴대폰에서 바로 받기: 저장소 **Releases** → `CarMirror (최신 빌드)` → `CarMirror.apk`
+
+## 설치 방법 A: 휴대폰만으로 (PC 없음)
+
+**1단계: 그냥 설치해 보기**
+1. 휴대폰에서 `CarMirror.apk` 를 받아 눌러 설치 (출처를 알 수 없는 앱 허용)
+2. 안드로이드 오토 설정 → **버전** 10번 탭 → `⋮ → 개발자 설정` → **알 수 없는 출처** 체크
+3. 차량에 연결해 앱 목록에 CarMirror 가 보이면 끝
+
+**2단계: 안 보이면 Shizuku + InstallWithOptions 로 다시 설치** (안드로이드 11 이상, Wi-Fi 연결 필요)
+1. 플레이스토어에서 **Shizuku** 설치
+2. 개발자 옵션 켜기: `설정 → 휴대전화 정보 → 소프트웨어 정보 → 빌드번호` 7번 탭
+3. Shizuku 실행 → **무선 디버깅으로 시작** → 안내대로 `개발자 옵션 → 무선 디버깅 → 페어링 코드로 기기 페어링` 의 코드를 Shizuku 알림에 입력 → 시작
+4. GitHub `zacharee/InstallWithOptions` 의 Releases 에서 APK 를 받아 설치 → 실행 → Shizuku 권한 허용
+5. 기존 CarMirror 삭제
+6. InstallWithOptions 에서 **설치 프로그램 패키지(Installer package)** 를 `com.android.vending` 으로 지정 → `CarMirror.apk` 선택 → 설치
+7. 차량에 다시 연결해 확인
+
+Shizuku 는 휴대폰을 재부팅하면 3번을 다시 해야 하지만, CarMirror 는 한 번 설치하면 그대로 남습니다.
+
+## 설치 방법 B: PC + adb
 
 안드로이드 오토는 플레이스토어에서 설치되지 않은 앱을 숨기기 때문에, 설치 출처를 지정해 adb로 설치합니다.
 

@@ -7,6 +7,9 @@ on:
       - '.github/workflows/car-mirror.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -35,3 +38,15 @@ jobs:
         with:
           name: CarMirror-apk
           path: out/CarMirror.apk
+
+      # 휴대폰에서 바로 받을 수 있도록 고정 릴리스(carmirror-latest)에 APK 를 올린다.
+      - name: Publish to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: carmirror-latest
+          name: CarMirror (최신 빌드)
+          prerelease: true
+          files: out/CarMirror.apk
+          body: |
+            휴대폰에서 CarMirror.apk 를 눌러 받으세요.
+            빌드 커밋: ${{ github.sha }}
