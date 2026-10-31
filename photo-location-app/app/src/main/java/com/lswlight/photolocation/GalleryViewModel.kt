@@ -25,14 +25,14 @@ data class PhotoGroup(
     /** 지도 열기용 대표 좌표 (위치 없는 그룹은 null) */
     val centerLat: Double?,
     val centerLng: Double?,
-    /** 하위 지역 (경상북도 아래 포항시, 김천시 …). 비어 있으면 바로 월 폴더로 들어간다. */
+    /** 하위 지역 (경상북도 아래 포항시, 김천시 …). 비어 있으면 바로 분기 폴더로 들어간다. */
     val subgroups: List<PhotoGroup> = emptyList(),
     /** 사용자가 만든 '내 폴더'이면 그 폴더 이름(⭐ 없이), 아니면 null */
     val customFolder: String? = null,
 ) {
-    /** 월별 하위 폴더: (2026년 10월, 사진들) 최신 달부터 */
-    val months: List<Pair<String, List<Photo>>> by lazy {
-        photos.groupBy { monthLabel(it.dateTaken) }.toList().sortedByDescending { it.first }
+    /** 분기별 하위 폴더: (2026년 4분기, 사진들) 최신 분기부터 */
+    val quarters: List<Pair<String, List<Photo>>> by lazy {
+        photos.groupBy { quarterLabel(it.dateTaken) }.toList().sortedByDescending { it.first }
     }
 }
 

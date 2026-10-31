@@ -13,10 +13,11 @@ const val EXPORT_ROOT = "Pictures/앨범박스/"
 /** 앱 이름을 바꾸기 전에 쓰던 내보내기 폴더. 비우기와 출처 판별에서 계속 인식한다. */
 const val LEGACY_EXPORT_ROOT = "Pictures/사진위치분류/"
 
-private val MONTH_FORMAT = java.text.SimpleDateFormat("yyyy년 MM월", java.util.Locale.KOREAN)
-
-/** 월 폴더 이름. 두 자리 월이라 PC 에서도 순서대로 정렬된다. 예: 2026년 03월 */
-fun monthLabel(time: Long): String = MONTH_FORMAT.format(java.util.Date(time))
+/** 분기 폴더 이름. 1~3월 1분기, 4~6월 2분기 … 예: 2026년 1분기 */
+fun quarterLabel(time: Long): String {
+    val cal = java.util.Calendar.getInstance().apply { timeInMillis = time }
+    return "${cal.get(java.util.Calendar.YEAR)}년 ${cal.get(java.util.Calendar.MONTH) / 3 + 1}분기"
+}
 
 /** 윈도우에서도 쓸 수 있는 폴더 이름으로 바꾼다. */
 private fun safeName(name: String): String =
@@ -24,15 +25,15 @@ private fun safeName(name: String): String =
 
 /**
  * 그룹의 사진마다 넣을 폴더.
- * 하위 지역이 있으면 '경상북도/포항시/2026년 10월/', 없으면 '대구/2026년 10월/'
+ * 하위 지역이 있으면 '경상북도/포항시/2026년 4분기/', 없으면 '대구/2026년 4분기/'
  */
 fun exportTargets(group: PhotoGroup): List<Pair<Photo, String>> {
     val base = EXPORT_ROOT + safeName(group.name) + "/"
     if (group.subgroups.isEmpty()) {
-        return group.photos.map { it to base + monthLabel(it.dateTaken) + "/" }
+        return group.photos.map { it to base + quarterLabel(it.dateTaken) + "/" }
     }
     return group.subgroups.flatMap { sub ->
-        sub.photos.map { it to base + safeName(sub.name) + "/" + monthLabel(it.dateTaken) + "/" }
+        sub.photos.map { it to base + safeName(sub.name) + "/" + quarterLabel(it.dateTaken) + "/" }
     }
 }
 

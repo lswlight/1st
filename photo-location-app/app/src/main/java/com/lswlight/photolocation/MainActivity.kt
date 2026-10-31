@@ -260,7 +260,7 @@ private fun App(vm: GalleryViewModel = viewModel()) {
         return
     }
 
-    // 그룹 → (하위 지역) → 월 폴더 → 사진 순으로 들어간다.
+    // 그룹 → (하위 지역) → 분기 폴더 → 사진 순으로 들어간다.
     val group = state.groups.firstOrNull { it.name == openGroup }
     val sub = group?.subgroups?.firstOrNull { it.name == openSub }
     // 월 목록을 보여줄 대상: 하위 지역이 있는 그룹이면 고른 하위 지역, 아니면 그룹 자체
@@ -269,7 +269,7 @@ private fun App(vm: GalleryViewModel = viewModel()) {
         group.subgroups.isEmpty() -> group
         else -> sub?.let { it.copy(name = "${group.name} › ${it.name}") }
     }
-    val month = monthOwner?.months?.firstOrNull { it.first == openMonth }
+    val month = monthOwner?.quarters?.firstOrNull { it.first == openMonth }
     val photo = month?.second?.firstOrNull { it.id == openPhotoId }
     val closeMonthList = {
         if (sub != null) {
@@ -661,7 +661,7 @@ private fun ExportScreen(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Spacer(Modifier.height(4.dp))
-                    Text("폴더 구조: 앨범박스 › 그룹 › 2026년 10월 › 사진", style = MaterialTheme.typography.bodySmall)
+                    Text("폴더 구조: 앨범박스 › 그룹 › 2026년 4분기 › 사진", style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(12.dp))
                     ModeRow(!move, "복사", "원본은 그대로 두고 복사본을 만듭니다. 그만큼 저장 공간을 더 씁니다.") { move = false }
                     ModeRow(move, "이동", "원본 파일을 그룹 폴더로 옮깁니다. 저장 공간을 더 쓰지 않습니다.") { move = true }
@@ -848,7 +848,7 @@ private fun SubgroupListScreen(group: PhotoGroup, onBack: () -> Unit, onSub: (Ph
     }
 }
 
-/** 그룹 안의 월별 폴더 목록 */
+/** 그룹 안의 분기별 폴더 목록 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MonthListScreen(group: PhotoGroup, onBack: () -> Unit, onMonth: (String) -> Unit) {
@@ -860,7 +860,7 @@ private fun MonthListScreen(group: PhotoGroup, onBack: () -> Unit, onMonth: (Str
                     Column {
                         Text(group.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(
-                            "${group.photos.size}장 · ${group.months.size}개월",
+                            "${group.photos.size}장 · ${group.quarters.size}개 분기",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
@@ -890,7 +890,7 @@ private fun MonthListScreen(group: PhotoGroup, onBack: () -> Unit, onMonth: (Str
                     )
                 }
             }
-            items(group.months, key = { it.first }) { (label, photos) ->
+            items(group.quarters, key = { it.first }) { (label, photos) ->
                 Row(
                     modifier = Modifier.fillMaxWidth().clickable { onMonth(label) }
                         .padding(horizontal = 16.dp, vertical = 10.dp),
