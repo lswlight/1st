@@ -41,6 +41,20 @@ object CardMessageParser {
         "USD", "JPY", "EUR", "CNY", "GBP", "HKD", "SGD", "AUD", "CAD", "CHF",
         "THB", "VND", "TWD", "PHP", "NZD", "MYR", "IDR",
     )
+    // "33.83(USD)", "31.85 달러" 처럼 숫자 뒤에 통화가 오는 형식 (KB국민·신한 해외승인 문자)
+    private val FOREIGN_SUFFIX = Regex("""(?<![\d,.])(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*\(?\s*(${CURRENCIES.joinToString("|")}|달러|엔|유로|위안|파운드)(?![A-Za-z])\)?""")
+    private val CURRENCY_WORD = mapOf("달러" to "USD", "엔" to "JPY", "유로" to "EUR", "위안" to "CNY", "파운드" to "GBP")
+
+    /** 외화 금액 (통화 코드, 숫자 문자열). "USD 12.50", "33.83(USD)", "31.85 달러" 모두 읽는다. */
+    private fun findForeign(body: String): Pair<String, String>? {
+        FOREIGN.find(body)?.let { return it.groupValues[1] to it.groupValues[2] }
+        FOREIGN_SUFFIX.find(body)?.let { m ->
+            val unit = m.groupValues[2]
+            return (CURRENCY_WORD[unit] ?: unit) to m.groupValues[1]
+        }
+        return null
+    }
+
     private val FOREIGN = Regex("""(?<![A-Z])(${CURRENCIES.joinToString("|")})\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)""")
 
     // 외화 1단위당 대략적인 원화. 받아 둔 환율이 없을 때(인터넷 안 됨 등)만 쓴다
@@ -110,9 +124,9 @@ object CardMessageParser {
 
         // 원화 금액이 있으면 그대로, 없으면 외화 금액을 원화로 환산한다
         val (krw, minus) = findAmount(body) ?: (null to false)
-        val foreign = if (krw == null) FOREIGN.find(body) else null
-        val rate = foreign?.let { rates[it.groupValues[1]] ?: FALLBACK_KRW_PER_UNIT[it.groupValues[1]] } ?: 0.0
-        val amount = krw ?: foreign?.let { toKrw(it.groupValues[2], rate * (1 + feePercent / 100)) } ?: return null
+        val foreign = if (krw == null) findForeign(body) else null
+        val rate = foreign?.let { rates[it.first] ?: FALLBACK_KRW_PER_UNIT[it.first] } ?: 0.0
+        val amount = krw ?: foreign?.let { toKrw(it.second, rate * (1 + feePercent / 100)) } ?: return null
         val card = (CARD.find(body) ?: CARD_SHORT.find(body))?.let { normalizeCard(it.groupValues[1]) }
             ?: if (body.contains("[KB]")) "KB국민카드" else ""
 
@@ -124,7 +138,7 @@ object CardMessageParser {
             merchant = findMerchant(body).ifEmpty { "카드 결제" },
             card = card,
             time = findTime(body, now),
-            foreign = foreign?.let { "${it.groupValues[1]} ${it.groupValues[2]}" }.orEmpty(),
+            foreign = foreign?.let { "${it.first} ${it.second}" }.orEmpty(),
             rate = rate,
             feePercent = if (foreign != null) feePercent else 0.0,
         )
@@ -206,6 +220,9 @@ object CardMessageParser {
         Regex("""\d[\d*]*(?:-[\d*]+)+\S*"""),        // 계좌번호 1002-938-235***계좌, 9003-2963-****-1
         DATE_TIME,
         FOREIGN,                                   // "USD 9.99" 가 날짜 규칙에 먹히기 전에 지운다
+        FOREIGN_SUFFIX,                            // "33.83(USD)", "31.85 달러"
+        Regex("""\([A-Z]{2}\)"""),                // 나라 코드 (LU)
+        Regex("""^[가-힣]{1,3}\s{2,}(?=[A-Za-z])"""),  // 나라 줄임말 "네덜   ALIEXPRESS"
         Regex("""\d{1,2}[/.]\d{1,2}"""),          // 날짜만 있는 경우
         Regex("""\d{1,2}:\d{2}(:\d{2})?"""),       // 시각만 있는 경우
         AMOUNT,

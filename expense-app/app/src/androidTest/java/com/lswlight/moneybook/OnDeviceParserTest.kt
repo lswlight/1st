@@ -63,4 +63,12 @@ class OnDeviceParserTest {
         assertNull(CardMessageParser.parse("MG새마을금고\n[출금] 500,000원 잔액 93,639원 10/28 13:00 타행이체 이우진", now, trustedSource = true))
         assertNotNull(CardMessageParser.parse("MG새마을금고\n[출금] 55,000원 잔액 93,639원 10/28 13:00 자동이체 SKT통신요금", now, trustedSource = true))
     }
+
+    @Test
+    fun overseasSuffixCurrencyOnDevice() {
+        val kb = CardMessageParser.parse("KB국민카드\n[Web발신] KB국민카드8063 해외승인\n이*우님\n33.83(USD) 11/01 01:12\n네덜   ALIEXPRESS", now)
+        assertEquals("ALIEXPRESS", kb!!.merchant)
+        val sh = CardMessageParser.parse("신한카드 승인안내\n[Web발신] 신한(0579)해외승인 이*우 31.85 달러(LU)11/01 01:16 ALIEXPRESS 누적495,853원", now)
+        assertEquals("USD 31.85", sh!!.foreign)
+    }
 }

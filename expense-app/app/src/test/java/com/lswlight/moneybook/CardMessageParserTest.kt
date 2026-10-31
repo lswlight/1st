@@ -322,6 +322,33 @@ class CardMessageParserTest {
     }
 
     @Test
+    fun kbOverseasUsdInParens() {
+        val p = CardMessageParser.parse("KB국민카드\n[Web발신] KB국민카드8063 해외승인\n이*우님\n33.83(USD) 11/01 01:12\n네덜   ALIEXPRESS",
+            now, rates = mapOf("USD" to 1400.0))!!
+        assertEquals("USD 33.83", p.foreign)
+        assertEquals(Math.round(33.83 * 1400), p.amount)
+        assertEquals("ALIEXPRESS", p.merchant)
+        assertEquals("KB국민카드", p.card)
+        val c = CardMessageParser.parse("KB국민카드\n[Web발신] KB국민카드8063 해외취소\n이*우님\n33.83(USD) 11/01 01:18\n네덜   ALIEXPRESS", now)!!
+        assertTrue(c.isCancel)
+        assertEquals("ALIEXPRESS", c.merchant)
+    }
+
+    @Test
+    fun shinhanOverseasDollarWord() {
+        val p = CardMessageParser.parse("신한카드 승인안내\n[Web발신] 신한(0579)해외승인 이*우 31.85 달러(LU)11/01 01:16 ALIEXPRESS 누적495,853원",
+            now, rates = mapOf("USD" to 1400.0))!!
+        assertEquals("USD 31.85", p.foreign)
+        assertEquals(Math.round(31.85 * 1400), p.amount)
+        assertEquals("ALIEXPRESS", p.merchant)
+        assertEquals("신한카드", p.card)
+        val c = CardMessageParser.parse("신한카드 승인안내\n[Web발신] 신한해외취소 이*우(0579) 11/01 01:07\n33.06 달러 (LU)ALIEXPRESS 누적452,856원", now)!!
+        assertTrue(c.isCancel)
+        assertEquals("USD 33.06", c.foreign)
+        assertEquals("ALIEXPRESS", c.merchant)
+    }
+
+    @Test
     fun ignoresNonPaymentMessages() {
         assertNull(parse("신한카드(1234) 승인거절 홍*동 12,500원 한도초과"))
         assertNull(parse("[신한카드] 11월 결제예정금액은 1,234,567원입니다"))
