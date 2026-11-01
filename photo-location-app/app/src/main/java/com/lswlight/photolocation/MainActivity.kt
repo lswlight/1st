@@ -42,6 +42,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
@@ -102,7 +106,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.round
@@ -1178,12 +1186,15 @@ private fun PhotoScreen(
             ) { page ->
                 val item = photos[page]
                 Box(Modifier.fillMaxSize()) {
-                    AsyncImage(
-                        model = item.uri,
-                        contentDescription = item.name,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                    val image = @Composable {
+                        AsyncImage(
+                            model = item.uri,
+                            contentDescription = item.name,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                    if (item.isVideo) image() else ZoomableBox(Modifier.fillMaxSize()) { image() }
                     if (item.isVideo) {
                         PlayBadge(
                             Modifier.align(Alignment.Center).size(72.dp)
@@ -1244,6 +1255,62 @@ private fun dateRange(photos: List<Photo>): String {
 private fun openMap(context: Context, lat: Double, lng: Double, label: String) {
     val uri = Uri.parse("geo:$lat,$lng?q=$lat,$lng(${Uri.encode(label)})")
     startSafely(context, Intent(Intent.ACTION_VIEW, uri))
+}
+
+/**
+ * 두 손가락으로 벌려 확대(최대 5배), 두 번 톡톡 눌러 2.5배 ↔ 원래 크기.
+ * 확대하지 않았을 때 한 손가락으로 밀면 터치를 넘겨서 좌우로 다른 사진으로 넘어간다.
+ */
+@Composable
+private fun ZoomableBox(modifier: Modifier, content: @Composable () -> Unit) {
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    var size by remember { mutableStateOf(IntSize.Zero) }
+    // 확대한 만큼만 움직일 수 있게 가장자리에서 멈춘다.
+    fun clamp(o: Offset, s: Float): Offset {
+        val maxX = size.width * (s - 1) / 2
+        val maxY = size.height * (s - 1) / 2
+        return Offset(o.x.coerceIn(-maxX, maxX), o.y.coerceIn(-maxY, maxY))
+    }
+    Box(
+        modifier
+            .onSizeChanged { size = it }
+            .pointerInput(Unit) {
+                detectTapGestures(onDoubleTap = { tap ->
+                    if (scale > 1f) {
+                        scale = 1f
+                        offset = Offset.Zero
+                    } else {
+                        // 누른 곳을 중심으로 확대
+                        val center = Offset(size.width / 2f, size.height / 2f)
+                        scale = 2.5f
+                        offset = clamp((center - tap) * 1.5f, 2.5f)
+                    }
+                })
+            }
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    do {
+                        val event = awaitPointerEvent()
+                        val fingers = event.changes.count { it.pressed }
+                        if (fingers >= 2 || scale > 1f) {
+                            val newScale = (scale * event.calculateZoom()).coerceIn(1f, 5f)
+                            offset = if (newScale == 1f) Offset.Zero else clamp(offset + event.calculatePan(), newScale)
+                            scale = newScale
+                            // 확대·이동 중에는 사진이 넘어가지 않도록 터치를 여기서 쓴다.
+                            event.changes.forEach { if (it.positionChanged()) it.consume() }
+                        }
+                    } while (event.changes.any { it.pressed })
+                }
+            }
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                translationX = offset.x
+                translationY = offset.y
+            },
+    ) { content() }
 }
 
 /** 목록에서 손가락 위치에 있는 사진의 id (날짜 제목 줄이면 null) */
