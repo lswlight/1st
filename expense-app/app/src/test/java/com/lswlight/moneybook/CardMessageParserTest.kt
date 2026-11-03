@@ -349,6 +349,14 @@ class CardMessageParserTest {
     }
 
     @Test
+    fun naverPayStyle() {
+        // 네이버페이 앱 알림 (앱 이름을 첫 줄로 붙여서 들어온다) — 실제 문구 확인 전 예상 형식
+        val p = parse("네이버페이\n결제 완료\n쿠팡 상품명 외 1건\n12,900원 결제가 완료되었습니다.")!!
+        assertEquals(12900L, p.amount)
+        assertEquals("쿠팡 상품명 외 1건", p.merchant)
+    }
+
+    @Test
     fun ignoresNonPaymentMessages() {
         assertNull(parse("신한카드(1234) 승인거절 홍*동 12,500원 한도초과"))
         assertNull(parse("[신한카드] 11월 결제예정금액은 1,234,567원입니다"))

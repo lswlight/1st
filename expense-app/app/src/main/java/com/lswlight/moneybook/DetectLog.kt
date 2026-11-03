@@ -49,6 +49,8 @@ object DetectLog {
         "com.google.android.apps.messaging" -> "Google 메시지"
         "viva.republica.toss" -> "토스"
         "com.kakaopay.app" -> "카카오페이"
+        "com.nhn.android.search" -> "네이버"
+        "com.naverfin.payapp" -> "네이버페이"
         else -> pkg
     }
 }

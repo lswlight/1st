@@ -30,13 +30,14 @@ class CardNotificationListener : NotificationListenerService() {
         // "은행·뱅크·금고" 등이 들어가면 (예: MG새마을금고) 은행 앱으로 보고 출금 알림을 기록한다
         val label = appLabel(pkg)
         val trusted = isCardApp(pkg) || label.contains("카드") || BANK_LABEL.containsMatchIn(label)
-        if (!trusted && pkg !in MESSAGE_APPS) return
+        val payLabel = PAY_LABEL.containsMatchIn(label)
+        if (!trusted && !payLabel && pkg !in MESSAGE_APPS) return
 
         val n = sbn.notification
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
 
         // 카드사 앱 알림은 제목이 "결제" 뿐이라, 앱 이름을 첫 줄로 붙여 카드사를 알 수 있게 한다
-        val text = notificationText(n).let { if (label.contains("카드")) "$label\n$it" else it }
+        val text = notificationText(n).let { if (label.contains("카드") || payLabel) "$label\n$it" else it }
         val posted = sbn.postTime.toLocalDateTime()
         worker.execute {
             try {
@@ -160,6 +161,8 @@ class CardNotificationListener : NotificationListenerService() {
     companion object {
         private const val TAG = "MoneyBook"
 
+        private val PAY_LABEL = Regex("""페이|[Pp]ay""")
+
         private val BANK_LABEL = Regex("""은행|뱅크|뱅킹|금고|신협|우체국|원큐""")
 
         private val MONEY_LIKE = Regex("""\d\s*원|${CardMessageParser.CURRENCIES.joinToString("|")}""")
@@ -177,6 +180,7 @@ class CardNotificationListener : NotificationListenerService() {
             "com.android.mms",
             "com.android.messaging",
             "com.kakao.talk",                      // 카카오톡 (카드사 알림톡)
+            "com.nhn.android.search",              // 네이버 앱 (네이버페이 결제 알림, 뉴스 등도 오므로 결제 문구일 때만)
         )
 
         /** 결제 알림만 보내는 앱: 카드 단어가 없어도 결제 문구면 기록한다. */
@@ -186,6 +190,8 @@ class CardNotificationListener : NotificationListenerService() {
             "com.kakaobank.channel",               // 카카오뱅크
             "nh.smart.nhallonepay",                // NH pay
             "kvp.jjy.MispAndroid320",              // BC 페이북
+            "com.naverfin.payapp",                 // 네이버페이
+            "com.samsung.android.spay",            // 삼성페이(삼성 월렛)
         )
 
         // 신한·KB·현대·삼성·롯데·우리 등 카드사 앱은 패키지 이름에 card 가 들어간다
