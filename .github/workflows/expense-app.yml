@@ -35,6 +35,22 @@ jobs:
           curl -sS -m 10 https://open.er-api.com/v6/latest/KRW | head -c 400; echo
           curl -sS -m 10 https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/krw.json | grep -o '"date":"[^"]*"\|"jpy":[0-9.e-]*\|"usd":[0-9.e-]*'
 
+      - name: 가족 공유 서버 동작 확인 (방 만들기 → 올리기 → 받기 → 삭제)
+        continue-on-error: true
+        run: |
+          S=$(grep -o 'DEFAULT_SERVER = "[^"]*"' app/src/main/java/com/lswlight/moneybook/FamilySync.kt | cut -d'"' -f2)
+          echo "서버: $S"; curl -sS -m 15 "$S/"; echo
+          R=$(curl -sS -m 15 -X POST "$S/api/households" -H 'Content-Type: application/json' -d '{}')
+          W=$(echo "$R" | jq -r .writeKey); V=$(echo "$R" | jq -r .viewToken)
+          test -n "$W" && test "$W" != null
+          NOW=$(( $(date +%s) * 1000 ))
+          curl -sS -m 15 -X POST "$S/api/entries" -H "Authorization: Bearer $W" -H 'Content-Type: application/json' \
+            -d "{\"entries\":[{\"uid\":\"ci-1\",\"owner\":\"CI\",\"kind\":\"EXPENSE\",\"amount\":1234,\"memo\":\"점검\",\"card\":\"테스트\",\"time\":$NOW,\"deleted\":false}]}"; echo
+          G=$(curl -sS -m 15 "$S/api/entries?v=$V&from=$((NOW-60000))&to=$((NOW+60000))"); echo "$G"
+          echo "$G" | jq -e '.entries[0].amount == 1234'
+          curl -sS -m 15 -o /dev/null -w "보기 화면 HTTP %{http_code}\n" "$S/v/$V"
+          curl -sS -m 15 -X DELETE "$S/api/households" -H "Authorization: Bearer $W"; echo
+
       - name: 서명 및 패키지 정보 확인
         run: |
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)

@@ -22,7 +22,7 @@ object FamilySync {
     private const val CODE_PREFIX = "MBSHARE2:"
 
     /** 공유 서버 주소. 배포한 뒤 여기에 넣는다 (공유 설정의 '서버 주소'에서도 바꿀 수 있다). */
-    const val DEFAULT_SERVER = ""
+    const val DEFAULT_SERVER = "https://moneybook-sync.lswlight.workers.dev"
 
     private val worker = Executors.newSingleThreadExecutor()
 
