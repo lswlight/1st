@@ -280,6 +280,7 @@ class MainActivity : Activity() {
             "💱  환율 · 해외 수수료",
             "🚫  기록 제외 목록",
             "🔔  알림 접근 설정 열기",
+            "🔒  개인정보처리방침",
         )
         AlertDialog.Builder(this)
             .setTitle("설정")
@@ -288,13 +289,22 @@ class MainActivity : Activity() {
                     0 -> showDetectLog()
                     1 -> showRates()
                     2 -> showExcludeList()
-                    else -> startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                    3 -> startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                    else -> openWeb("${FamilySync.DEFAULT_SERVER}/privacy")
                 }
             }
             .setNegativeButton("닫기", null)
             .show()
     }
 
+
+    private fun openWeb(url: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+        } catch (e: android.content.ActivityNotFoundException) {
+            Toast.makeText(this, url, Toast.LENGTH_LONG).show()
+        }
+    }
 
     // ---------------------------------------------------------------- 입력/수정
 

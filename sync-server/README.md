@@ -29,6 +29,12 @@ npx wrangler d1 create moneybook        # 나온 database_id 를 wrangler.toml �
 npx wrangler deploy
 ```
 
+## 공개 페이지
+
+- `/app` — 앱 소개·다운로드 페이지. 카카오톡으로 앱을 알릴 때 이 주소를 보낸다.
+- `/privacy` — 개인정보처리방침. 플레이스토어 등록의 '개인정보처리방침 URL' 에 쓴다. `/privacy#delete` 는 데이터 삭제 안내(플레이스토어 '데이터 삭제 URL').
+- 내용을 바꾸면 `worker.js` 를 대시보드 코드 편집 화면에 다시 붙여넣고 배포한다. 앱 버전이 바뀌면 `APP_VERSION` 도 함께 고친다.
+
 ## 무료 한도
 
 Workers 무료: 하루 요청 10만 건. D1 무료: 저장 5GB, 하루 읽기 500만·쓰기 10만 행.
