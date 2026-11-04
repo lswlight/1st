@@ -149,73 +149,140 @@ class FamilyActivity : Activity() {
     private fun showIntro() {
         content.addView(vertical().apply {
             background = rounded(Ui.CARD, 20)
-            setPadding(dp(14), dp(12), dp(14), dp(12))
-            addView(text("가족 가계부를 시작해 볼까요?", 16f, bold = true))
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            addView(text("가족과 가계부를 함께 볼까요? 👨‍👩‍👧", 17f, bold = true))
             addView(text(
-                "가족 모두의 내역을 한 구글 시트에 모아 각자 폰에서 함께 봐요. 서버나 가입은 필요 없어요.\n\n" +
-                    "■ 처음 만드는 사람 (예: 남편)\n" +
-                    "1) [공유 설정] → [스크립트 복사]\n" +
-                    "2) 구글 시트를 새로 만들고 확장 프로그램 → Apps Script 에 붙여 넣기\n" +
-                    "3) 배포 → 새 배포 → 유형 '웹 앱', 액세스 '모든 사용자' → 배포 → 웹 앱 URL 복사\n" +
-                    "4) [공유 설정]의 '시트 주소'에 붙여 넣고 저장 → [지금까지 내역 올리기]\n" +
-                    "5) [공유 코드 복사] → 카카오톡으로 가족에게 보내기\n\n" +
-                    "■ 함께 보는 사람\n" +
-                    "· 안드로이드: [공유 설정] → 받은 공유 코드 붙여 넣기 → 내 이름 적고 저장\n" +
-                    "· 아이폰: [공유 설정] → [아이폰·PC용 웹 보기 링크 복사] → 카카오톡으로 보내기 → 사파리에서 열고 공유 → '홈 화면에 추가'",
-                14f, Color.DKGRAY,
-            ).apply { setPadding(0, dp(6), 0, 0) })
-            addView(button("공유 설정 열기") { showSettings() }, margins(top = 8))
+                "버튼 한 번이면 시작돼요. 가입이나 구글 시트 설정은 필요 없어요.\n\n" +
+                    "① [가족 공유 시작하기]를 누르면 보기 링크가 만들어져요\n" +
+                    "② 링크를 카카오톡으로 가족에게 보내요\n" +
+                    "③ 가족은 링크만 열면 바로 내 가계부를 봐요 (아이폰·PC는 웹으로, 앱 설치 필요 없음)\n\n" +
+                    "이후 결제는 자동으로 올라가고, 가족은 열 때마다 최신 내역을 봐요.",
+                14f, Ui.SUB,
+            ).apply { setPadding(0, dp(8), 0, dp(12)); setLineSpacing(0f, 1.2f) })
+            if (!FamilySync.hasServer(this@FamilyActivity)) {
+                addView(text("⚠️ 아직 공유 서버 주소가 없어요. [공유 설정] → 서버 주소를 먼저 넣어 주세요.", 13f, Ui.CORAL).apply { setPadding(0, 0, 0, dp(10)) })
+            }
+            addView(Ui.pill(this@FamilyActivity, "가족 공유 시작하기", Ui.GREEN, Color.WHITE, 15f) { startSharing() })
+            addView(Ui.pill(this@FamilyActivity, "받은 링크·초대 코드로 참여하기") { joinDialog() }, margins(top = 8))
         })
+    }
+
+    /** 이름을 묻고 가족 방을 만든 뒤 지금까지 내역을 올린다. */
+    private fun startSharing() {
+        if (!FamilySync.hasServer(this)) { showSettings(); return }
+        val form = vertical().apply { setPadding(dp(20), dp(8), dp(20), 0) }
+        val owner = field(form, "내 이름 (가족 화면에 표시돼요, 예: 남편)", FamilySync.owner(this).ifEmpty { "남편" })
+        AlertDialog.Builder(this)
+            .setTitle("가족 공유 시작하기")
+            .setView(form)
+            .setPositiveButton("시작") { _, _ ->
+                toast("만드는 중...")
+                Thread {
+                    val r = runCatching {
+                        FamilySync.start(this, owner.text.toString().ifBlank { "나" })
+                        FamilySync.uploadAll(this, LedgerDb.get(this).all())
+                    }
+                    runOnUiThread {
+                        r.onSuccess { load(); shareLinkDialog() }
+                            .onFailure { toast("시작하지 못했어요: ${it.message}. 인터넷 연결을 확인해 주세요") }
+                    }
+                }.start()
+            }
+            .setNegativeButton("닫기", null)
+            .show()
+    }
+
+    /** 만든 보기 링크를 가족에게 보내는 창. */
+    private fun shareLinkDialog() {
+        val link = FamilySync.viewLink(this)
+        AlertDialog.Builder(this)
+            .setTitle("가족에게 링크 보내기")
+            .setMessage("이 링크를 카카오톡 등으로 보내면 가족이 바로 볼 수 있어요.\n아이폰은 사파리에서 열고 공유 → '홈 화면에 추가'를 하면 앱처럼 쓸 수 있어요.\n\n$link")
+            .setPositiveButton("링크 보내기") { _, _ -> shareText(link) }
+            .setNeutralButton("복사") { _, _ -> copy("가족 가계부 링크", link); toast("복사했어요") }
+            .setNegativeButton("닫기", null)
+            .show()
+    }
+
+    private fun joinDialog() {
+        val form = vertical().apply { setPadding(dp(20), dp(8), dp(20), 0) }
+        val code = field(form, "받은 보기 링크 또는 초대 코드(MBSHARE2:…)", "")
+        val owner = field(form, "내 이름 (예: 아내)", FamilySync.owner(this))
+        AlertDialog.Builder(this)
+            .setTitle("가족 공유 참여하기")
+            .setView(form)
+            .setPositiveButton("참여") { _, _ ->
+                if (FamilySync.join(this, code.text.toString(), owner.text.toString().ifBlank { "가족" })) {
+                    toast("참여했어요")
+                    if (FamilySync.canWrite(this)) FamilySync.uploadAll(this, LedgerDb.get(this).all())
+                    load()
+                } else toast("링크나 코드가 올바르지 않아요")
+            }
+            .setNegativeButton("닫기", null)
+            .show()
     }
 
     private fun showSettings() {
         val form = vertical().apply { setPadding(dp(20), dp(8), dp(20), 0) }
-        val owner = field(form, "내 이름 (목록에 표시돼요, 예: 남편)", FamilySync.owner(this))
-        val code = field(form, "받은 공유 코드 (가족이 보내 준 MBSHARE:… 를 붙여 넣기)", "")
-        val url = field(form, "시트 주소 (Apps Script 웹 앱 URL)", FamilySync.url(this))
-        val key = field(form, "공유 비밀번호 (자동 생성, 가족 모두 같아야 해요)", FamilySync.key(this))
+        val configured = FamilySync.configured(this)
+        val owner = field(form, "내 이름 (가족 화면에 표시돼요)", FamilySync.owner(this))
         val upload = CheckBox(this).apply {
             text = "내 내역도 가족 가계부에 올리기"
             isChecked = FamilySync.uploadOn(this@FamilyActivity)
+            isEnabled = FamilySync.canWrite(this@FamilyActivity)
         }
         form.addView(upload, margins(top = 8))
-        form.addView(button("스크립트 복사 (처음 만드는 사람)") {
-            copy("자동가계부 스크립트", FamilySync.script(this))
-            toast("복사했어요. 구글 시트 Apps Script 에 붙여 넣으세요")
-        }, margins(top = 8))
-        form.addView(button("공유 코드 복사 (가족에게 보내기)") {
-            if (!FamilySync.configured(this)) toast("먼저 시트 주소를 넣고 저장해 주세요")
-            else { copy("자동가계부 공유 코드", FamilySync.shareCode(this)); toast("복사했어요. 카카오톡으로 가족에게 보내세요") }
-        })
-        form.addView(button("아이폰·PC용 웹 보기 링크 복사") {
-            if (!FamilySync.configured(this)) toast("먼저 시트 주소를 넣고 저장해 주세요")
-            else { copy("자동가계부 가족 가계부 링크", FamilySync.webLink(this)); toast("복사했어요. 아이폰 사파리에서 열고 '홈 화면에 추가' 하세요") }
-        })
-        form.addView(button("지금까지 내역 모두 올리기") {
-            if (!FamilySync.configured(this)) { toast("먼저 시트 주소를 넣고 저장해 주세요"); return@button }
-            toast("올리는 중...")
-            FamilySync.uploadAll(this, LedgerDb.get(this).all())
-            FamilySync.flush(this) { ok -> runOnUiThread { toast(if (ok) "모두 올렸어요" else "올리지 못했어요. 주소와 인터넷을 확인해 주세요"); load() } }
-        })
+        if (configured) {
+            form.addView(button("보기 링크 보내기 (아이폰·PC 가족)") { shareLinkDialog() }, margins(top = 10))
+            if (FamilySync.canWrite(this)) {
+                form.addView(button("초대 코드 보내기 (안드로이드 가족도 자기 내역 올리기)") {
+                    shareText(FamilySync.inviteCode(this))
+                }, margins(top = 8))
+                form.addView(button("지금까지 내역 다시 올리기") {
+                    toast("올리는 중...")
+                    FamilySync.uploadAll(this, LedgerDb.get(this).all()) { ok ->
+                        runOnUiThread { toast(if (ok) "모두 올렸어요" else "올리지 못했어요. 인터넷을 확인해 주세요"); load() }
+                    }
+                }, margins(top = 8))
+            }
+            form.addView(Ui.pill(this, "가족 공유 끄기", Ui.PEACH, Ui.CORAL) { confirmStop() }, margins(top = 8))
+        }
+        val server = field(form, "공유 서버 주소 (보통은 바꿀 필요 없어요)", FamilySync.server(this))
 
         AlertDialog.Builder(this)
             .setTitle("가족 공유 설정")
             .setView(ScrollView(this).apply { addView(form) })
             .setPositiveButton("저장") { _, _ ->
-                var u = url.text.toString()
-                var k = key.text.toString()
-                if (code.text.isNotBlank()) {
-                    val parsed = FamilySync.parseCode(code.text.toString())
-                    if (parsed == null) { toast("공유 코드가 올바르지 않아요"); return@setPositiveButton }
-                    u = parsed.first
-                    k = parsed.second
-                }
-                FamilySync.save(this, u, k, owner.text.toString(), upload.isChecked)
+                FamilySync.setOwner(this, owner.text.toString())
+                FamilySync.setUpload(this, upload.isChecked)
+                FamilySync.setServer(this, server.text.toString())
                 toast("저장했어요")
                 load()
             }
             .setNegativeButton("닫기", null)
             .show()
+    }
+
+    private fun confirmStop() {
+        val owner = FamilySync.canWrite(this)
+        AlertDialog.Builder(this)
+            .setTitle("가족 공유를 끌까요?")
+            .setMessage(if (owner) "서버에 올린 가족 가계부 내역이 모두 지워지고, 보낸 링크로도 더 이상 볼 수 없어요. 내 폰의 기록은 그대로 남아요."
+                        else "이 폰에서 가족 가계부 보기를 그만둬요. 가족의 기록은 지워지지 않아요.")
+            .setPositiveButton("끄기") { _, _ ->
+                Thread {
+                    val r = runCatching { FamilySync.stop(this, deleteOnServer = owner) }
+                    runOnUiThread { r.onSuccess { toast("껐어요"); load() }.onFailure { toast("끄지 못했어요: ${it.message}") } }
+                }.start()
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun shareText(text: String) {
+        startActivity(android.content.Intent.createChooser(
+            android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, text),
+            "보내기"))
     }
 
     // ---------------------------------------------------------------- 도우미
