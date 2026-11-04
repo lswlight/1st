@@ -33,9 +33,6 @@ class MainActivity : Activity() {
     private var month: YearMonth = YearMonth.now()
 
     private lateinit var monthLabel: TextView
-    private lateinit var incomeText: TextView
-    private lateinit var expenseText: TextView
-    private lateinit var balanceText: TextView
     private lateinit var permissionBanner: LinearLayout
     private lateinit var statusText: TextView
     private lateinit var list: LinearLayout
@@ -44,6 +41,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         db = LedgerDb.get(this)
         setContentView(buildLayout())
+        if (intent.getBooleanExtra(Ui.EXTRA_OPEN_SETTINGS, false)) monthLabel.post { showSettings() }
     }
 
     override fun onResume() {
@@ -63,107 +61,170 @@ class MainActivity : Activity() {
         LedgerDb.onChanged = null
     }
 
-    // ---------------------------------------------------------------- 화면 구성
+    // ---------------------------------------------------------------- 화면 구성 ('파스텔 라이프')
+
+    private lateinit var dateLabel: TextView
+    private lateinit var headline: TextView
+    private lateinit var tileIncome: TextView
+    private lateinit var tileExpense: TextView
+    private lateinit var tileAvg: TextView
+    private lateinit var ratioBar: LinearLayout
+    private lateinit var ratioFill: View
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        intent.getStringExtra(StatsActivity.EXTRA_MONTH)?.let { month = YearMonth.parse(it) }
+        if (intent.getBooleanExtra(Ui.EXTRA_OPEN_SETTINGS, false)) monthLabel.post { showSettings() }
+    }
 
     private fun buildLayout(): View {
-        val root = vertical().apply { setPadding(dp(16), dp(12), dp(16), dp(24)) }
+        val root = vertical().apply { setPadding(dp(20), dp(14), dp(20), dp(96)) }
 
-        // 월 이동
+        // 날짜 + 월 이동
         root.addView(horizontal().apply {
             gravity = Gravity.CENTER_VERTICAL
-            addView(button("◀") { month = month.minusMonths(1); refresh() })
-            monthLabel = text("", 20f, bold = true).apply { gravity = Gravity.CENTER }
-            addView(monthLabel, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-            addView(button("▶") { month = month.plusMonths(1); refresh() })
+            dateLabel = text("", 13f, Ui.SUB)
+            addView(dateLabel, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            addView(Ui.pill(this@MainActivity, "‹", size = 15f) { month = month.minusMonths(1); refresh() })
+            monthLabel = text("", 14f, Ui.INK, bold = true).apply { setPadding(dp(10), 0, dp(10), 0) }
+            addView(monthLabel)
+            addView(Ui.pill(this@MainActivity, "›", size = 15f) { month = month.plusMonths(1); refresh() })
         })
 
-        // 요약 카드
-        root.addView(vertical().apply {
-            background = rounded(Color.parseColor("#F2F4F7"))
-            setPadding(dp(16), dp(12), dp(16), dp(12))
-            incomeText = summaryRow(this, "수입", INCOME_COLOR)
-            expenseText = summaryRow(this, "지출", EXPENSE_COLOR)
-            balanceText = summaryRow(this, "남은 돈", Color.BLACK, big = true)
-        }, margins(top = 8))
+        // 말 걸듯 요약
+        headline = text("", 23f, Ui.INK, bold = true).apply { setPadding(0, dp(10), 0, 0); setLineSpacing(0f, 1.15f) }
+        root.addView(headline)
 
-        statusText = text("", 12f, Color.GRAY).apply { setPadding(dp(4), dp(6), 0, 0) }
-        root.addView(statusText)
+        // 수입 · 지출 · 하루 평균 타일
+        root.addView(horizontal().apply {
+            tileIncome = tile(this, "수입", Ui.MINT)
+            tileExpense = tile(this, "지출", Ui.PEACH)
+            tileAvg = tile(this, "하루 평균", Ui.LAVENDER)
+        }, margins(top = 16))
 
-        // 알림 접근 권한 안내
+        // 수입 대비 지출 막대
+        ratioFill = View(this).apply { background = Ui.round(this@MainActivity, Color.parseColor("#FF9C87"), 99) }
+        ratioBar = horizontal().apply {
+            background = Ui.round(this@MainActivity, Color.parseColor("#EFE7DA"), 99)
+            addView(ratioFill, LinearLayout.LayoutParams(0, dp(10), 0f))
+            addView(View(this@MainActivity), LinearLayout.LayoutParams(0, dp(10), 1f))
+        }
+        root.addView(ratioBar, margins(top = 12))
+
+        // 자동 감지 상태
+        statusText = text("", 12.5f, Ui.GREEN, bold = true).apply {
+            setPadding(dp(12), dp(7), dp(12), dp(7))
+            background = Ui.round(this@MainActivity, Ui.MINT, 99)
+        }
+        root.addView(horizontal().apply { addView(statusText) }, margins(top = 12))
+
+        // 알림 접근 안내
         permissionBanner = vertical().apply {
-            background = rounded(Color.parseColor("#FFF4E5"))
-            setPadding(dp(16), dp(12), dp(16), dp(12))
-            addView(text("카드 결제 자동 기록이 꺼져 있어요.\n'알림 접근'에서 이 앱을 허용해 주세요.", 14f))
-            addView(button("알림 접근 설정 열기") {
+            background = Ui.round(this@MainActivity, Ui.WARN, 20)
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            addView(text("카드 결제 자동 기록이 꺼져 있어요", 15f, Ui.INK, bold = true))
+            addView(text("'알림 접근'에서 자동가계부를 허용하면 결제 알림이 자동으로 적혀요.", 13f, Ui.SUB).apply { setPadding(0, dp(4), 0, dp(10)) })
+            addView(Ui.pill(this@MainActivity, "알림 접근 설정 열기", Ui.GREEN, Color.WHITE) {
                 startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
             })
         }
-        root.addView(permissionBanner, margins(top = 8))
+        root.addView(permissionBanner, margins(top = 12))
 
-        // 달력·그래프 화면
-        root.addView(horizontal().apply {
-            addView(button("📅 달력 · 📊 그래프") { openStats(StatsActivity.TAB_CALENDAR) }, weight())
-            addView(button("💳 카드별 지출") { openStats(StatsActivity.TAB_CARDS) }, weight())
-        }, margins(top = 8))
-        root.addView(button("👨‍👩‍👧 가족 가계부 (함께 보기)") {
-            startActivity(Intent(this, FamilyActivity::class.java).putExtra(StatsActivity.EXTRA_MONTH, month.toString()))
-        }, margins(top = 0))
+        list = vertical().apply {
+            background = Ui.round(this@MainActivity, Ui.CARD, 24)
+            setPadding(dp(16), dp(6), dp(16), dp(10))
+        }
+        root.addView(list, margins(top = 14))
 
-        // 입력 버튼
-        root.addView(horizontal().apply {
-            addView(button("+ 수입") { editEntry(null, Kind.INCOME) }, weight())
-            addView(button("+ 지출") { editEntry(null, Kind.EXPENSE) }, weight())
-            addView(button("문자 붙여넣기") { pasteMessage() }, weight())
-        }, margins(top = 8))
-
-        root.addView(horizontal().apply {
-            addView(button("최근 감지 알림") { showDetectLog() }, weight())
-            addView(button("환율·수수료") { showRates() }, weight())
-            addView(button("기록 제외") { showExcludeList() }, weight())
-        })
-
-        list = vertical()
-        root.addView(list, margins(top = 8))
-
-        return ScrollView(this).apply {
-            setBackgroundColor(Color.WHITE)
-            addView(root)
+        val scroll = ScrollView(this).apply { addView(root) }
+        val tabs = Ui.tabBar(this, Ui.TAB_HOME, month.toString()) { tab ->
+            if (tab == Ui.TAB_SETTINGS) { showSettings(); true } else false
+        }
+        // 오른쪽 아래 ＋ 버튼 (수입 · 지출 · 문자 붙여넣기)
+        val fab = text("＋", 28f, Color.WHITE).apply {
+            gravity = Gravity.CENTER
+            background = android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(Color.parseColor("#33FFFFFF")),
+                GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Ui.GREEN) }, null)
+            elevation = dp(6).toFloat()
+            setOnClickListener { showAddMenu() }
+        }
+        return android.widget.FrameLayout(this).apply {
+            addView(Ui.screen(this@MainActivity, scroll, tabs))
+            addView(fab, android.widget.FrameLayout.LayoutParams(dp(58), dp(58)).apply {
+                gravity = Gravity.BOTTOM or Gravity.END
+                rightMargin = dp(20)
+                bottomMargin = dp(86)
+            })
         }
     }
 
+    private fun tile(parent: LinearLayout, label: String, color: Int): TextView {
+        val value = text("", 17f, Ui.INK, bold = true).apply { setPadding(0, dp(4), 0, 0) }
+        parent.addView(vertical().apply {
+            background = Ui.round(this@MainActivity, color, 20)
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            addView(text(label, 12f, Color.parseColor("#6F665A")))
+            addView(value)
+        }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { rightMargin = if (label == "하루 평균") 0 else dp(10) })
+        return value
+    }
+
     private fun refresh() {
+        val today = java.time.LocalDate.now()
+        dateLabel.text = today.format(DateTimeFormatter.ofPattern("M월 d일 EEEE", java.util.Locale.KOREAN))
         monthLabel.text = "${month.year}년 ${month.monthValue}월"
         val enabled = listenerEnabled()
         permissionBanner.visibility = if (enabled) View.GONE else View.VISIBLE
+        val ok = enabled && CardNotificationListener.connected
         statusText.text = when {
-            !enabled -> "자동 감지: 꺼짐"
-            CardNotificationListener.connected -> "자동 감지: 동작 중 ●"
-            else -> "자동 감지: 연결 안 됨 — 계속 이 상태면 알림 접근을 껐다가 다시 켜 주세요"
+            !enabled -> "○ 자동 감지 꺼짐"
+            ok -> "● 자동 감지 중"
+            else -> "○ 감지 연결 안 됨 — 알림 접근을 껐다 켜 주세요"
         }
-        statusText.setTextColor(if (enabled && CardNotificationListener.connected) INCOME_COLOR else EXPENSE_COLOR)
+        statusText.setTextColor(if (ok) Ui.GREEN else Ui.CORAL)
+        statusText.background = Ui.round(this, if (ok) Ui.MINT else Ui.PEACH, 99)
 
         val entries = db.month(month)
         val income = entries.filter { it.kind == Kind.INCOME }.sumOf { it.amount }
         val expense = entries.filter { it.kind == Kind.EXPENSE }.sumOf { it.amount }
-        incomeText.text = won(income)
-        expenseText.text = won(expense)
-        balanceText.text = won(income - expense)
+        val left = income - expense
+        val green = String.format("#%06X", 0xFFFFFF and Ui.GREEN)
+        val coral = String.format("#%06X", 0xFFFFFF and Ui.CORAL)
+        val prefix = if (YearMonth.now() == month) "이번 달은" else "${month.monthValue}월은"
+        headline.text = android.text.Html.fromHtml(
+            if (left >= 0) "$prefix <font color='$green'>${won(left)}</font><br>남았어요 🌿"
+            else "$prefix <font color='$coral'>${won(-left)}</font><br>더 썼어요 🍂",
+            android.text.Html.FROM_HTML_MODE_LEGACY,
+        )
+        tileIncome.text = StatsActivity.compact(income)
+        tileExpense.text = StatsActivity.compact(expense)
+        val days = if (YearMonth.now() == month) today.dayOfMonth else month.lengthOfMonth()
+        tileAvg.text = StatsActivity.compact(if (days > 0) expense / days else 0)
+        val ratio = if (income > 0) (expense.toFloat() / income).coerceIn(0f, 1f) else if (expense > 0) 1f else 0f
+        (ratioFill.layoutParams as LinearLayout.LayoutParams).weight = ratio
+        (ratioBar.getChildAt(1).layoutParams as LinearLayout.LayoutParams).weight = 1f - ratio + 0.0001f
+        ratioBar.requestLayout()
 
         list.removeAllViews()
         if (entries.isEmpty()) {
-            list.addView(text("이번 달 내역이 없어요.", 14f, Color.GRAY).apply {
-                setPadding(0, dp(24), 0, 0)
+            list.addView(text("아직 이번 달 내역이 없어요.\n카드를 쓰면 여기에 자동으로 적혀요.", 14f, Ui.SUB).apply {
+                setPadding(0, dp(28), 0, dp(28))
                 gravity = Gravity.CENTER
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             return
         }
-        var lastDay = -1
+        var lastDay: java.time.LocalDate? = null
         for (e in entries) {
-            if (e.time.dayOfMonth != lastDay) {
-                lastDay = e.time.dayOfMonth
-                list.addView(text(e.time.format(DAY_HEADER), 13f, Color.GRAY, bold = true).apply {
-                    setPadding(0, dp(14), 0, dp(4))
-                })
+            val d = e.time.toLocalDate()
+            if (d != lastDay) {
+                lastDay = d
+                val label = when (d) {
+                    today -> "오늘"
+                    today.minusDays(1) -> "어제"
+                    else -> d.format(DAY_HEADER)
+                }
+                list.addView(text(label, 12.5f, Ui.SUB, bold = true).apply { setPadding(dp(2), dp(14), 0, dp(2)) })
             }
             list.addView(entryRow(e))
         }
@@ -171,22 +232,69 @@ class MainActivity : Activity() {
 
     private fun entryRow(e: Entry): View = horizontal().apply {
         gravity = Gravity.CENTER_VERTICAL
-        setPadding(0, dp(8), 0, dp(8))
+        setPadding(0, dp(9), 0, dp(9))
+        background = android.graphics.drawable.RippleDrawable(
+            android.content.res.ColorStateList.valueOf(Color.parseColor("#11000000")), null, null)
         setOnClickListener { editEntry(e, e.kind) }
 
+        val (emoji, tint) = Ui.category(e.memo, e.kind, e.amount)
+        addView(text(emoji, 19f).apply {
+            gravity = Gravity.CENTER
+            background = Ui.round(this@MainActivity, tint, 14)
+        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { rightMargin = dp(12) })
+
         val left = vertical()
-        left.addView(text(e.memo, 16f))
+        left.addView(text(e.memo, 15.5f, Ui.INK, bold = true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
         val sub = listOf(e.time.format(TIME), e.card, if (e.auto) "자동" else "").filter { it.isNotEmpty() }
-        left.addView(text(sub.joinToString(" · "), 12f, Color.GRAY))
+        left.addView(text(sub.joinToString(" · "), 12f, Ui.SUB).apply { setPadding(0, dp(2), 0, 0) })
         addView(left, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
 
         val (sign, color) = when {
-            e.kind == Kind.INCOME -> "+" to INCOME_COLOR
-            e.amount < 0 -> "취소 " to Color.GRAY
-            else -> "-" to EXPENSE_COLOR
+            e.kind == Kind.INCOME -> "+" to Ui.GREEN
+            e.amount < 0 -> "취소 " to Ui.SUB
+            else -> "-" to Ui.INK
         }
-        addView(text(sign + won(Math.abs(e.amount)), 16f, color, bold = true))
+        addView(text(sign + won(Math.abs(e.amount)), 15.5f, color, bold = true).apply { setPadding(dp(8), 0, 0, 0) })
     }
+
+    /** ＋ 버튼: 수입 · 지출 · 문자 붙여넣기. */
+    private fun showAddMenu() {
+        val items = arrayOf("💰  수입 입력 (월급 등)", "💳  지출 직접 입력", "📋  카드 문자 붙여넣기")
+        AlertDialog.Builder(this)
+            .setTitle("무엇을 추가할까요?")
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> editEntry(null, Kind.INCOME)
+                    1 -> editEntry(null, Kind.EXPENSE)
+                    else -> pasteMessage()
+                }
+            }
+            .setNegativeButton("닫기", null)
+            .show()
+    }
+
+    /** 설정 탭: 감지 알림 · 환율 · 기록 제외 · 알림 접근. */
+    private fun showSettings() {
+        val items = arrayOf(
+            "🔎  최근 감지 알림 (못 읽은 결제 다시 읽기)",
+            "💱  환율 · 해외 수수료",
+            "🚫  기록 제외 목록",
+            "🔔  알림 접근 설정 열기",
+        )
+        AlertDialog.Builder(this)
+            .setTitle("설정")
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> showDetectLog()
+                    1 -> showRates()
+                    2 -> showExcludeList()
+                    else -> startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                }
+            }
+            .setNegativeButton("닫기", null)
+            .show()
+    }
+
 
     // ---------------------------------------------------------------- 입력/수정
 
@@ -341,11 +449,6 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private fun openStats(tab: Int) {
-        startActivity(Intent(this, StatsActivity::class.java)
-            .putExtra(StatsActivity.EXTRA_MONTH, month.toString())
-            .putExtra(StatsActivity.EXTRA_TAB, tab))
-    }
 
     /**
      * '결제 문구 아님' 으로 남은 알림을 지금 규칙으로 다시 읽어 기록한다. 기록한 건수를 돌려준다.
@@ -462,16 +565,6 @@ class MainActivity : Activity() {
         if (YearMonth.now() == month) LocalDateTime.now().withSecond(0).withNano(0)
         else month.atDay(1).atTime(12, 0)
 
-    private fun summaryRow(parent: LinearLayout, label: String, color: Int, big: Boolean = false): TextView {
-        val size = if (big) 20f else 16f
-        val value = text("", size, color, bold = true).apply { gravity = Gravity.END }
-        parent.addView(horizontal().apply {
-            setPadding(0, dp(4), 0, dp(4))
-            addView(text(label, size), LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-            addView(value)
-        })
-        return value
-    }
 
     private fun field(parent: LinearLayout, label: String, value: String, type: Int = InputType.TYPE_CLASS_TEXT): EditText {
         parent.addView(text(label, 12f, Color.GRAY).apply { setPadding(0, dp(10), 0, 0) })
@@ -515,8 +608,8 @@ class MainActivity : Activity() {
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 
     companion object {
-        private val INCOME_COLOR = Color.parseColor("#1E6FD9")
-        private val EXPENSE_COLOR = Color.parseColor("#D93025")
+        private val INCOME_COLOR = Ui.GREEN
+        private val EXPENSE_COLOR = Ui.CORAL
         private val DAY_HEADER = DateTimeFormatter.ofPattern("M월 d일 (E)", java.util.Locale.KOREAN)
         private val TIME = DateTimeFormatter.ofPattern("HH:mm")
         private val LOG_TIME = DateTimeFormatter.ofPattern("M/d HH:mm:ss")

@@ -12,12 +12,10 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
-import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -35,9 +33,9 @@ class StatsActivity : Activity() {
     private var tab = TAB_CALENDAR
 
     private lateinit var monthLabel: TextView
-    private lateinit var tabCalendar: Button
-    private lateinit var tabGraph: Button
-    private lateinit var tabCards: Button
+    private lateinit var tabCalendar: TextView
+    private lateinit var tabGraph: TextView
+    private lateinit var tabCards: TextView
     private lateinit var content: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,19 +43,9 @@ class StatsActivity : Activity() {
         db = LedgerDb.get(this)
         intent.getStringExtra(EXTRA_MONTH)?.let { month = YearMonth.parse(it) }
         tab = intent.getIntExtra(EXTRA_TAB, if (intent.getBooleanExtra(EXTRA_GRAPH, false)) TAB_GRAPH else TAB_CALENDAR)
-        title = "달력 · 그래프 · 카드별"
-        // 제목 줄 왼쪽 ← 버튼으로 메인 화면으로 돌아간다
-        actionBar?.setDisplayHomeAsUpEnabled(true)
         setContentView(buildLayout())
     }
 
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == android.R.id.home) {
-            finish()
-            return true
-        }
-        return super.onOptionsItemSelected(item)
-    }
 
     override fun onResume() {
         super.onResume()
@@ -65,36 +53,51 @@ class StatsActivity : Activity() {
     }
 
     private fun buildLayout(): View {
-        val root = vertical().apply { setPadding(dp(16), dp(12), dp(16), dp(24)) }
+        val root = vertical().apply { setPadding(dp(20), dp(4), dp(20), dp(24)) }
         root.addView(horizontal().apply {
             gravity = Gravity.CENTER_VERTICAL
-            addView(button("◀") { month = month.minusMonths(1); refresh() })
-            monthLabel = text("", 20f, bold = true).apply { gravity = Gravity.CENTER }
+            addView(button("‹") { month = month.minusMonths(1); refresh() })
+            monthLabel = text("", 19f, bold = true).apply { gravity = Gravity.CENTER }
             addView(monthLabel, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-            addView(button("▶") { month = month.plusMonths(1); refresh() })
+            addView(button("›") { month = month.plusMonths(1); refresh() })
         })
         root.addView(horizontal().apply {
-            tabCalendar = button("달력") { tab = TAB_CALENDAR; refresh() }
-            tabGraph = button("그래프") { tab = TAB_GRAPH; refresh() }
-            tabCards = button("카드별") { tab = TAB_CARDS; refresh() }
-            addView(tabCalendar, weight())
-            addView(tabGraph, weight())
+            tabCalendar = button("달력") { tab = TAB_CALENDAR; rebuild() }
+            tabGraph = button("그래프") { tab = TAB_GRAPH; rebuild() }
+            tabCards = button("카드별") { tab = TAB_CARDS; rebuild() }
+            addView(tabCalendar, weight().apply { rightMargin = dp(8) })
+            addView(tabGraph, weight().apply { rightMargin = dp(8) })
             addView(tabCards, weight())
-        }, margins(top = 4))
+        }, margins(top = 10))
         content = vertical()
         root.addView(content, margins(top = 8))
-        root.addView(button("← 메인 화면으로 돌아가기") { finish() }, margins(top = 20))
-        return ScrollView(this).apply {
-            setBackgroundColor(Color.WHITE)
+        val page = vertical().apply {
+            addView(Ui.header(this@StatsActivity, if (tab == TAB_CARDS) "카드별 지출" else "달력 · 그래프"))
             addView(root)
         }
+        val tabs = Ui.tabBar(this, if (tab == TAB_CARDS) Ui.TAB_CARDS else Ui.TAB_CALENDAR, month.toString()) { t ->
+            when (t) {
+                Ui.TAB_CALENDAR -> { tab = TAB_CALENDAR; rebuild(); true }
+                Ui.TAB_CARDS -> { tab = TAB_CARDS; rebuild(); true }
+                else -> false
+            }
+        }
+        return Ui.screen(this, ScrollView(this).apply { addView(page) }, tabs)
+    }
+
+    /** 탭을 바꾸면 제목·아래쪽 탭 표시까지 다시 그린다. */
+    private fun rebuild() {
+        setContentView(buildLayout())
+        refresh()
     }
 
     private fun refresh() {
         monthLabel.text = "${month.year}년 ${month.monthValue}월"
-        tabCalendar.alpha = if (tab == TAB_CALENDAR) 1f else 0.5f
-        tabGraph.alpha = if (tab == TAB_GRAPH) 1f else 0.5f
-        tabCards.alpha = if (tab == TAB_CARDS) 1f else 0.5f
+        for ((v, t) in listOf(tabCalendar to TAB_CALENDAR, tabGraph to TAB_GRAPH, tabCards to TAB_CARDS)) {
+            val on = tab == t
+            v.setTextColor(if (on) Color.WHITE else Ui.INK)
+            v.background = Ui.round(this, if (on) Ui.GREEN else Ui.PILL, 99)
+        }
 
         val entries = db.month(month)
         val expense = entries.filter { it.kind == Kind.EXPENSE }
@@ -158,7 +161,7 @@ class StatsActivity : Activity() {
                 })
             }
             val card = vertical().apply {
-                background = rounded(Color.parseColor("#F2F4F7"), 12)
+                background = rounded(Ui.CARD, 20)
                 setPadding(dp(14), dp(12), dp(14), dp(12))
                 addView(horizontal().apply {
                     gravity = Gravity.CENTER_VERTICAL
@@ -292,7 +295,7 @@ class StatsActivity : Activity() {
         val days = if (YearMonth.now() == month) LocalDate.now().dayOfMonth else month.lengthOfMonth()
         val perDay = if (days > 0) expense / days else 0
         return vertical().apply {
-            background = rounded(Color.parseColor("#F2F4F7"), 12)
+            background = rounded(Ui.CARD, 20)
             setPadding(dp(14), dp(10), dp(14), dp(10))
             fun line(label: String, value: String, color: Int) = addView(horizontal().apply {
                 setPadding(0, dp(2), 0, dp(2))
@@ -318,12 +321,7 @@ class StatsActivity : Activity() {
             if (bold) typeface = Typeface.DEFAULT_BOLD
         }
 
-    private fun button(label: String, onClick: () -> Unit) =
-        Button(this).apply {
-            text = label
-            isAllCaps = false
-            setOnClickListener { onClick() }
-        }
+    private fun button(label: String, onClick: () -> Unit) = Ui.pill(this, label, onClick = onClick)
 
     private fun rounded(color: Int, radiusDp: Int) = GradientDrawable().apply {
         setColor(color)
@@ -341,8 +339,8 @@ class StatsActivity : Activity() {
         const val TAB_CALENDAR = 0
         const val TAB_GRAPH = 1
         const val TAB_CARDS = 2
-        val INCOME_COLOR = Color.parseColor("#1E6FD9")
-        val EXPENSE_COLOR = Color.parseColor("#D93025")
+        val INCOME_COLOR = Ui.GREEN
+        val EXPENSE_COLOR = Ui.CORAL
         private val TIME = DateTimeFormatter.ofPattern("HH:mm")
         private val DATE_TIME_SHORT = DateTimeFormatter.ofPattern("M/d HH:mm")
         private val DAY_TITLE = DateTimeFormatter.ofPattern("M월 d일 (E)", Locale.KOREAN)
@@ -402,14 +400,14 @@ class MonthCalendarView(context: Context) : View(context) {
             paint.color = if (spent > 0) {
                 val a = (40 + 170 * (spent.toFloat() / max)).toInt().coerceIn(40, 210)
                 Color.argb(a, 0xF2, 0x6B, 0x5B)
-            } else Color.parseColor("#F5F6F8")
+            } else Color.WHITE
             canvas.drawRoundRect(rect, 8 * density, 8 * density, paint)
 
             // 오늘 테두리
             if (month.atDay(day) == today) {
                 paint.style = Paint.Style.STROKE
                 paint.strokeWidth = 2 * density
-                paint.color = Color.parseColor("#1E6FD9")
+                paint.color = Ui.GREEN
                 canvas.drawRoundRect(rect, 8 * density, 8 * density, paint)
                 paint.style = Paint.Style.FILL
             }
@@ -427,7 +425,7 @@ class MonthCalendarView(context: Context) : View(context) {
 
             // 수입 있는 날: 파란 점
             if ((income[day] ?: 0L) > 0) {
-                paint.color = Color.parseColor("#1E6FD9")
+                paint.color = Ui.GREEN
                 canvas.drawCircle(rect.right - 7 * density, rect.top + 10 * density, 3.5f * density, paint)
             }
 
@@ -490,7 +488,7 @@ class DailyBarChart(context: Context) : View(context) {
         values.forEachIndexed { i, v ->
             if (v <= 0) return@forEachIndexed
             val h = (bottom - top) * (v / max)
-            paint.color = if (i + 1 == today) Color.parseColor("#1E6FD9") else Color.parseColor("#F26B5B")
+            paint.color = if (i + 1 == today) Ui.GREEN else Ui.CORAL
             canvas.drawRoundRect(RectF(left + slot * i + slot * 0.15f, bottom - h, left + slot * (i + 1) - slot * 0.15f, bottom),
                 2 * density, 2 * density, paint)
         }
@@ -561,8 +559,8 @@ class MonthlyBarChart(context: Context) : View(context) {
                 paint.textSize = 9 * density
                 canvas.drawText(StatsActivity.compact(v), x + barW / 2, bottom - h - 3 * density, paint)
             }
-            bar(income.getOrElse(i) { 0 }, cx - barW - 1 * density, Color.parseColor("#1E6FD9"))
-            bar(expense.getOrElse(i) { 0 }, cx + 1 * density, Color.parseColor("#F26B5B"))
+            bar(income.getOrElse(i) { 0 }, cx - barW - 1 * density, Ui.GREEN)
+            bar(expense.getOrElse(i) { 0 }, cx + 1 * density, Ui.CORAL)
             paint.color = Color.GRAY
             paint.textSize = 11 * density
             canvas.drawText(label, cx, height - 6 * density, paint)

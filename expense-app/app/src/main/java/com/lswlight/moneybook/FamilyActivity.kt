@@ -11,11 +11,9 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -37,15 +35,9 @@ class FamilyActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         intent.getStringExtra(StatsActivity.EXTRA_MONTH)?.let { month = YearMonth.parse(it) }
-        title = "가족 가계부"
-        actionBar?.setDisplayHomeAsUpEnabled(true)
         setContentView(buildLayout())
     }
 
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == android.R.id.home) { finish(); return true }
-        return super.onOptionsItemSelected(item)
-    }
 
     override fun onResume() {
         super.onResume()
@@ -53,27 +45,27 @@ class FamilyActivity : Activity() {
     }
 
     private fun buildLayout(): View {
-        val root = vertical().apply { setPadding(dp(16), dp(12), dp(16), dp(24)) }
+        val root = vertical().apply { setPadding(dp(20), dp(4), dp(20), dp(24)) }
         root.addView(horizontal().apply {
             gravity = Gravity.CENTER_VERTICAL
-            addView(button("◀") { month = month.minusMonths(1); load() })
-            monthLabel = text("", 20f, bold = true).apply { gravity = Gravity.CENTER }
+            addView(button("‹") { month = month.minusMonths(1); load() })
+            monthLabel = text("", 19f, bold = true).apply { gravity = Gravity.CENTER }
             addView(monthLabel, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-            addView(button("▶") { month = month.plusMonths(1); load() })
+            addView(button("›") { month = month.plusMonths(1); load() })
         })
         root.addView(horizontal().apply {
-            addView(button("새로고침") { load() }, weight())
+            addView(Ui.pill(this@FamilyActivity, "새로고침", Ui.GREEN, Color.WHITE) { load() }, weight().apply { rightMargin = dp(8) })
             addView(button("공유 설정") { showSettings() }, weight())
-        }, margins(top = 4))
+        }, margins(top = 10))
         status = text("", 12f, Color.GRAY).apply { setPadding(dp(4), dp(6), 0, 0) }
         root.addView(status)
         content = vertical()
         root.addView(content, margins(top = 8))
-        root.addView(button("← 메인 화면으로 돌아가기") { finish() }, margins(top = 20))
-        return ScrollView(this).apply {
-            setBackgroundColor(Color.WHITE)
+        val page = vertical().apply {
+            addView(Ui.header(this@FamilyActivity, "가족 가계부"))
             addView(root)
         }
+        return Ui.screen(this, ScrollView(this).apply { addView(page) }, Ui.tabBar(this, Ui.TAB_FAMILY, month.toString()))
     }
 
     private fun load() {
@@ -105,7 +97,7 @@ class FamilyActivity : Activity() {
         // 사람별 합계
         val byOwner = list.groupBy { it.owner }
         content.addView(vertical().apply {
-            background = rounded(Color.parseColor("#F2F4F7"), 12)
+            background = rounded(Ui.CARD, 20)
             setPadding(dp(14), dp(10), dp(14), dp(10))
             for ((owner, items) in byOwner) {
                 val inc = items.filter { it.kind == Kind.INCOME }.sumOf { it.amount }
@@ -156,7 +148,7 @@ class FamilyActivity : Activity() {
 
     private fun showIntro() {
         content.addView(vertical().apply {
-            background = rounded(Color.parseColor("#E8F1FD"), 12)
+            background = rounded(Ui.CARD, 20)
             setPadding(dp(14), dp(12), dp(14), dp(12))
             addView(text("가족 가계부를 시작해 볼까요?", 16f, bold = true))
             addView(text(
@@ -253,12 +245,7 @@ class FamilyActivity : Activity() {
             if (bold) typeface = Typeface.DEFAULT_BOLD
         }
 
-    private fun button(label: String, onClick: () -> Unit) =
-        Button(this).apply {
-            text = label
-            isAllCaps = false
-            setOnClickListener { onClick() }
-        }
+    private fun button(label: String, onClick: () -> Unit) = Ui.pill(this, label, onClick = onClick)
 
     private fun rounded(color: Int, radiusDp: Int) = GradientDrawable().apply {
         setColor(color)
