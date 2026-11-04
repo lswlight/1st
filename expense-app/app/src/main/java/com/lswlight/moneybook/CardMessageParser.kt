@@ -168,9 +168,11 @@ object CardMessageParser {
             val before = body.substring(0, m.range.first).substringAfterLast('\n')
             val minus = MINUS_BEFORE.containsMatchIn(before)
             val benefitWord = BENEFIT_PREFIX.containsMatchIn(before)
-            if (NOT_PAYMENT_PREFIX.containsMatchIn(before) && !(minus && benefitWord)) continue
             // "4,360원 적립", "500원 포인트 적립 예정" 처럼 금액 뒤에 적립이 붙으면 쓴 돈이 아니다
             val after = body.substring(m.range.last + 1).substringBefore('\n')
+            // 단, "토스포인트로 6,500원 결제", "포인트 1,000원 사용" 은 포인트로 낸 결제 금액이다
+            val pointPay = POINT_PAY.containsMatchIn(before + m.value + after) && !NOT_POINT_PAY.containsMatchIn(before)
+            if (NOT_PAYMENT_PREFIX.containsMatchIn(before) && !(minus && benefitWord) && !pointPay) continue
             if (POINT_SUFFIX.containsMatchIn(after)) continue
             val value = m.groupValues[1].replace(",", "").toLongOrNull() ?: continue
             if (value > 0) return value to minus
@@ -246,6 +248,34 @@ object CardMessageParser {
         // 한글이나 영문이 한 글자도 없으면 가맹점이 아니다
         return if (out.any { it.isLetter() }) out else ""
     }
+
+    // 페이 앱에서 포인트·머니(충전금)로 낸 결제: "토스포인트 1,000원 사용", "포인트로 6,500원 결제했어요", "토스머니로 결제"
+    private val POINT_PAY = Regex(
+        """(토스|네이버페이|N\s?[Pp]ay|네이버|카카오페이|페이코|PAYCO)?\s*(포인트|머니|충전금)\s*(?:으로|로)?\s*(?:[\d,]+\s*원\s*)?(?:결제|사용|차감)"""
+    )
+
+    private val NOT_POINT_PAY = Regex("""누적|잔액|잔여|남은|한도|적립|캐시백|할인|청구""")
+
+    /**
+     * 페이 앱 알림의 결제수단. 포인트·머니로 냈으면 "토스포인트"·"카카오페이머니" 처럼 돌려준다 ([app] 은 알림 보낸 앱 이름).
+     * 카드로 냈는데 카드사가 적혀 있지 않으면 null (같은 결제를 카드사가 알려 주면 그때 카드 이름으로 바뀐다).
+     */
+    fun payMethod(body: String, app: String): String? {
+        if (CARD.containsMatchIn(body)) return null
+        val m = POINT_PAY.find(body) ?: return null
+        val brand = m.groupValues[1].ifEmpty { app.trim() }.let {
+            when {
+                it.startsWith("N") || it == "네이버" -> "네이버페이"
+                it.startsWith("PAYCO") -> "페이코"
+                else -> it
+            }
+        }
+        val kind = if (m.groupValues[2] == "포인트") "포인트" else "머니"
+        return brand + kind
+    }
+
+    /** 카드사 이름이 담긴 카드 표시인지 (예: "신한카드", "토스뱅크카드"). 앱 이름·포인트 결제가 아닌지 볼 때 쓴다. */
+    fun isRealCard(card: String) = card.endsWith("카드") && POINT_PAY.find(card) == null
 
     private fun normalizeCard(name: String) = when (name) {
         "국민", "KB국민" -> "KB국민카드"

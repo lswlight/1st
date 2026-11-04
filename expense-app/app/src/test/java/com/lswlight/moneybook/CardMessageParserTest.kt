@@ -364,4 +364,23 @@ class CardMessageParserTest {
         assertNull(parse("친구: 어제 밥값 결제 15,000원 보낼게"))   // 카드 단어 없는 대화
         assertNull(parse("신한카드 인증번호 [123456]"))
     }
+
+    @Test
+    fun tossPointAndMoneyPayments() {
+        // 토스포인트·토스머니로 낸 결제는 결제수단 이름으로
+        val point = "토스포인트로 6,500원 결제했어요\n스타벅스"
+        assertEquals(6500L, parse(point, trusted = true)!!.amount)
+        assertEquals("토스포인트", CardMessageParser.payMethod(point, "토스"))
+        assertEquals("토스포인트", CardMessageParser.payMethod("포인트 1,000원 사용\nGS25", "토스"))
+        assertEquals("토스머니", CardMessageParser.payMethod("토스머니로 결제\n이디야 3,200원", "토스"))
+        assertEquals("네이버페이포인트", CardMessageParser.payMethod("N Pay 포인트 2,000원 사용", "네이버페이"))
+        // 카드로 낸 결제: 카드사가 적혀 있으면 그 카드, 없으면 결제수단을 정하지 않는다 (카드사 알림이 오면 바뀐다)
+        assertNull(CardMessageParser.payMethod("스타벅스에서 6,500원 결제했어요", "토스"))
+        assertNull(CardMessageParser.payMethod("신한카드로 6,500원 결제 · 포인트 사용 0원", "토스"))
+        assertEquals("신한카드", parse("토스페이\n신한카드로 6,500원 결제했어요", trusted = true)!!.card)
+        // 실제 카드 이름인지
+        assertTrue(CardMessageParser.isRealCard("신한카드"))
+        assertTrue(!CardMessageParser.isRealCard("토스"))
+        assertTrue(!CardMessageParser.isRealCard("토스포인트"))
+    }
 }

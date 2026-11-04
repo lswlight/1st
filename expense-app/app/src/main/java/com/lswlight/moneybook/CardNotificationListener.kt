@@ -99,8 +99,24 @@ class CardNotificationListener : NotificationListenerService() {
         val kind = if (parsed.isBenefit) Kind.INCOME else Kind.EXPENSE
         val amount = if (parsed.isCancel) -parsed.amount else parsed.amount
 
+        // 페이 앱(토스 등) 결제의 결제수단: 포인트·머니로 냈으면 그 이름, 카드사가 적혀 있으면 그 카드, 아니면 앱 이름
+        val payApp = pkg in PAY_APPS || PAY_LABEL.containsMatchIn(label)
+        val card = parsed.card.ifEmpty {
+            (if (payApp) CardMessageParser.payMethod(text, label) else null) ?: if (trusted || payApp) label else ""
+        }
+
         val db = LedgerDb.get(this)
-        if (db.hasRecentAuto(kind, amount, time)) {
+        val same = db.recentAuto(kind, amount, time)
+        if (same != null) {
+            // 같은 결제를 페이 앱이 먼저, 카드사가 나중에 알려 주면 (예: 토스페이로 체크카드 결제) 카드 이름을 실제 카드로 바꾼다
+            if (CardMessageParser.isRealCard(card) && !CardMessageParser.isRealCard(same.card) &&
+                CardMessageParser.payMethod(same.raw, same.card) == null
+            ) {
+                db.save(same.copy(card = card))
+                DetectLog.add(this, pkg, "같은 결제라 카드를 '${same.card.ifEmpty { "없음" }}' → '$card' 로 고침", text)
+                main.post { LedgerDb.onChanged?.invoke() }
+                return
+            }
             DetectLog.add(this, pkg, "중복이라 건너뜀 (3분 안에 같은 금액이 이미 기록됨)", text)
             return
         }
@@ -109,8 +125,8 @@ class CardNotificationListener : NotificationListenerService() {
                 kind = kind,
                 amount = amount,
                 memo = parsed.memo(),
-                // 문구에 카드사가 없으면 알림 보낸 앱 이름 (예: MG새마을금고)
-                card = parsed.card.ifEmpty { if (trusted) label else "" },
+                // 문구에 카드사가 없으면 결제수단(토스포인트 등)이나 알림 보낸 앱 이름 (예: MG새마을금고)
+                card = card,
                 time = time,
                 auto = true,
                 raw = text,
@@ -161,7 +177,7 @@ class CardNotificationListener : NotificationListenerService() {
     companion object {
         private const val TAG = "MoneyBook"
 
-        private val PAY_LABEL = Regex("""페이|[Pp]ay""")
+        val PAY_LABEL = Regex("""페이|[Pp]ay""")
 
         private val BANK_LABEL = Regex("""은행|뱅크|뱅킹|금고|신협|우체국|원큐""")
 
@@ -184,7 +200,7 @@ class CardNotificationListener : NotificationListenerService() {
         )
 
         /** 결제 알림만 보내는 앱: 카드 단어가 없어도 결제 문구면 기록한다. */
-        private val PAY_APPS = setOf(
+        val PAY_APPS = setOf(
             "viva.republica.toss",                 // 토스
             "com.kakaopay.app",                    // 카카오페이
             "com.kakaobank.channel",               // 카카오뱅크
