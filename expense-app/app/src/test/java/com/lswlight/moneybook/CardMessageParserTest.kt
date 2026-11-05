@@ -383,4 +383,14 @@ class CardMessageParserTest {
         assertTrue(!CardMessageParser.isRealCard("토스"))
         assertTrue(!CardMessageParser.isRealCard("토스포인트"))
     }
+
+    @Test
+    fun monthlyBillNoticeIsIgnored() {
+        // 다음 결제일에 나갈 한 달 이용 금액 안내 (청구서): 결제가 아니다
+        assertNull(parse("현대카드\n[Web발신]\n[현대카드] 이*우님 11/12 결제금액 11,380원(11/01기준) 신한은행"))
+        assertNull(parse("[신한카드] 11월 청구예정 금액 352,100원"))
+        // 일반 승인 문자의 '결제금액' 은 그대로 기록
+        assertEquals(15000L, parse("[현대카드] 승인 이*우 15,000원 일시불 11/05 12:30 스타벅스")!!.amount)
+        assertEquals(8900L, parse("토스페이\n결제금액 8,900원\nGS25에서 결제했어요", trusted = true)!!.amount)
+    }
 }
