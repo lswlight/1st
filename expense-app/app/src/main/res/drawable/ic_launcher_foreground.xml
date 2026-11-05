@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 초록 바탕 위 크림색 가계부 노트 + 노란 점 (108dp 캔버스, 가운데 72dp 안에 그림) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FBF7F0"
+        android:pathData="M40,34h28a8,8 0,0 1,8 8v28a8,8 0,0 1,-8 8h-28a8,8 0,0 1,-8 -8v-28a8,8 0,0 1,8 -8z" />
+    <path
+        android:strokeColor="#2F9E6E"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:pathData="M42,47h22M42,56h14M42,65h18" />
+    <path
+        android:fillColor="#FFD166"
+        android:pathData="M72,38m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0" />
+</vector>

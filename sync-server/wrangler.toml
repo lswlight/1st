@@ -1,0 +1,9 @@
+name = "moneybook-sync"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+# 대시보드에서 만든 D1 데이터베이스의 ID 를 넣는다 (명령줄 배포할 때만 필요)
+[[d1_databases]]
+binding = "DB"
+database_name = "moneybook"
+database_id = "여기에-D1-데이터베이스-ID"
