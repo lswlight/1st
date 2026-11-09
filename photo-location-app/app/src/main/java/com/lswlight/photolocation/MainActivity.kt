@@ -53,7 +53,6 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.grid.LazyGridState
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -101,6 +100,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -203,6 +203,8 @@ private fun App(vm: GalleryViewModel = viewModel()) {
     var openSub by rememberSaveable { mutableStateOf<String?>(null) }
     var openMonth by rememberSaveable { mutableStateOf<String?>(null) }
     var openPhotoId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // 사진을 보고 돌아왔을 때 그 사진이 보이게 하려고 마지막으로 본 사진을 기억한다
+    var lastPhotoId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -290,15 +292,22 @@ private fun App(vm: GalleryViewModel = viewModel()) {
         }
     }
 
+    // 분기 폴더의 스크롤 위치: 사진을 크게 보는 동안 목록 화면이 사라져도 위치를 잃지 않게 여기서 들고 있는다
+    val gridState = rememberSaveable(openGroup, openSub, openMonth, saver = LazyGridState.Saver) { LazyGridState() }
+    val closePhoto = {
+        lastPhotoId = openPhotoId
+        openPhotoId = null
+    }
+
     when {
         photo != null -> {
-            BackHandler { openPhotoId = null }
+            BackHandler { closePhoto() }
             PhotoScreen(
                 photo,
                 // 같은 분기 폴더의 사진들 사이를 좌우로 넘긴다.
                 photos = month!!.second,
                 onPageChanged = { openPhotoId = it.id },
-                onBack = { openPhotoId = null },
+                onBack = { closePhoto() },
                 onDelete = { vm.deleteItems(listOf(photo)) },
                 onSetHome = {
                     vm.setHome(photo)
@@ -316,6 +325,9 @@ private fun App(vm: GalleryViewModel = viewModel()) {
                 monthOwner!!.copy(name = "${monthOwner.name} · ${month.first}", photos = month.second),
                 onBack = { openMonth = null },
                 onPhoto = { openPhotoId = it.id },
+                gridState = gridState,
+                focusId = lastPhotoId,
+                onFocused = { lastPhotoId = null },
                 folders = state.customFolders,
                 onAddToFolder = { name, ids ->
                     vm.addToFolder(name, ids)
@@ -932,6 +944,9 @@ private fun GroupScreen(
     onAddToFolder: (name: String, ids: Set<Long>) -> Unit,
     onRemoveFromFolder: (ids: Set<Long>) -> Unit,
     onDelete: (List<Photo>) -> Unit,
+    gridState: LazyGridState,
+    focusId: Long?,
+    onFocused: () -> Unit,
 ) {
     val context = LocalContext.current
     // 사진은 최신순으로 정렬돼 있으므로 groupBy 결과도 최신 날짜부터 나온다.
@@ -944,7 +959,23 @@ private fun GroupScreen(
     BackHandler(enabled = selecting) { selected = emptySet() }
 
     // 꾹 눌러 끌기 선택: 화면에 보이는 순서(최신순)대로 사진 id 와 위치
-    val gridState = rememberLazyGridState()
+    // 사진을 보다가 좌우로 넘겨 다른 사진에서 돌아왔으면, 그 사진이 화면 밖일 때만 그 위치로 옮긴다
+    val gridIndex = remember(days) {
+        val map = HashMap<Long, Int>()
+        var i = 0
+        days.forEach { (_, photos) ->
+            i++ // 날짜 제목 줄
+            photos.forEach { map[it.id] = i++ }
+        }
+        map
+    }
+    LaunchedEffect(focusId) {
+        val id = focusId ?: return@LaunchedEffect
+        val visible = snapshotFlow { gridState.layoutInfo.visibleItemsInfo }.first { it.isNotEmpty() }
+        val index = gridIndex[id]
+        if (index != null && visible.none { it.key == id }) gridState.scrollToItem(index)
+        onFocused()
+    }
     val haptics = LocalHapticFeedback.current
     val orderedIds = remember(group) { group.photos.map { it.id } }
     val indexOf = remember(orderedIds) { orderedIds.withIndex().associate { it.value to it.index } }
