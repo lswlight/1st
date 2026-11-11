@@ -22,7 +22,7 @@ object FamilySync {
     private const val CODE_PREFIX = "MBSHARE2:"
 
     /** 공유 서버 주소. 배포한 뒤 여기에 넣는다 (공유 설정의 '서버 주소'에서도 바꿀 수 있다). */
-    const val DEFAULT_SERVER = "https://moneybook-sync.lswlight.workers.dev"
+    const val DEFAULT_SERVER = "https://graftkorea.com"
 
     private val worker = Executors.newSingleThreadExecutor()
 
@@ -30,7 +30,21 @@ object FamilySync {
 
     // ---------------------------------------------------------------- 설정
 
-    private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).also { migrate(it) }
+
+    /**
+     * 공유 서버를 graftkorea.com 으로 옮기면서, 예전 기본 서버(workers.dev)에서 만든 가족 방 정보는 지운다.
+     * 새 서버에는 그 방이 없으므로 [가족 공유 시작하기]부터 다시 한다. (서버 주소를 직접 넣은 경우는 그대로 둔다)
+     */
+    private fun migrate(p: android.content.SharedPreferences) {
+        if (p.getInt("layout", 0) >= 2) return
+        val e = p.edit().putInt("layout", 2)
+        val saved = p.getString("server", null).orEmpty()
+        if (saved.isBlank() || saved.contains("moneybook-sync.lswlight.workers.dev")) {
+            e.remove("server").remove("write").remove("view").putString("pending", "{}")
+        }
+        e.apply()
+    }
 
     fun server(c: Context) = prefs(c).getString("server", null)?.takeIf { it.isNotBlank() } ?: DEFAULT_SERVER
     fun owner(c: Context) = prefs(c).getString("owner", "").orEmpty()
@@ -60,6 +74,7 @@ object FamilySync {
         val res = JSONObject(request("POST", "${server(c)}/api/households", null, "{}"))
         if (!res.optBoolean("ok")) error(res.optString("error", "응답 오류"))
         prefs(c).edit()
+            .putString("server", server(c))
             .putString("write", res.getString("writeKey"))
             .putString("view", res.getString("viewToken"))
             .putString("owner", owner.trim())

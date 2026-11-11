@@ -240,7 +240,7 @@ ${ownerHtml ? `<h2>사람별</h2><div class="card">${ownerHtml}</div>` : ''}
 
 // ---------------------------------------------------------------- 소개 · 개인정보처리방침
 
-const APP_VERSION = '2.5';
+const APP_VERSION = '2.6';
 const APK_URL = 'https://github.com/lswlight/1st/releases/download/moneybook-latest/moneybook.apk';
 const IMG = 'https://raw.githubusercontent.com/lswlight/1st/40687aad10bc002e3649185d854fe9916907e48f/expense-app/docs/';
 const CONTACT = 'lswlight@gmail.com';

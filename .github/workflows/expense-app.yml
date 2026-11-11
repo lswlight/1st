@@ -49,6 +49,7 @@ jobs:
           G=$(curl -sS -m 15 "$S/api/entries?v=$V&from=$((NOW-60000))&to=$((NOW+60000))"); echo "$G"
           echo "$G" | jq -e '.entries[0].amount == 1234'
           curl -sS -m 15 -o /dev/null -w "보기 화면 HTTP %{http_code}\n" "$S/v/$V"
+          for p in / /app /privacy; do curl -sS -m 15 -o /dev/null -w "$p HTTP %{http_code}\n" "$S$p"; done
           curl -sS -m 15 -X DELETE "$S/api/households" -H "Authorization: Bearer $W"; echo
 
       - name: 서명 및 패키지 정보 확인
