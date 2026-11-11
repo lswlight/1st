@@ -29,6 +29,11 @@ npx wrangler d1 create moneybook        # 나온 database_id 를 wrangler.toml �
 npx wrangler deploy
 ```
 
+## 회사 도메인 연결 (graftkorea.com)
+
+Worker → 설정(Settings) → 도메인 및 경로(Domains & Routes) → 추가(Add) → 사용자 지정 도메인(Custom domain) → `graftkorea.com`.
+연결하면 같은 서버가 `https://graftkorea.com` 에서 회사 첫 화면(`/`), 앱 소개(`/app`), 개인정보처리방침(`/privacy`), 가족 공유 API(`/api/…`, `/v/…`)를 함께 제공한다. 서버 동작 확인은 `/health`.
+
 ## 공개 페이지
 
 - `/app` — 앱 소개·다운로드 페이지. 카카오톡으로 앱을 알릴 때 이 주소를 보낸다.

@@ -39,7 +39,7 @@ jobs:
         continue-on-error: true
         run: |
           S=$(grep -o 'DEFAULT_SERVER = "[^"]*"' app/src/main/java/com/lswlight/moneybook/FamilySync.kt | cut -d'"' -f2)
-          echo "서버: $S"; curl -sS -m 15 "$S/"; echo
+          echo "서버: $S"; curl -sS -m 15 "$S/health"; echo
           R=$(curl -sS -m 15 -X POST "$S/api/households" -H 'Content-Type: application/json' -d '{}')
           W=$(echo "$R" | jq -r .writeKey); V=$(echo "$R" | jq -r .viewToken)
           test -n "$W" && test "$W" != null

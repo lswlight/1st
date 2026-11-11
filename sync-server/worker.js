@@ -8,6 +8,8 @@
 //   POST   /api/entries             내역 올리기/고치기/지우기 (쓰기 키)
 //   GET    /api/entries?from=&to=   그 기간 내역 (쓰기 키 또는 ?v=보기 토큰)
 //   GET    /v/<보기 토큰>?m=YYYY-MM  가족 가계부 웹 화면
+//   GET    /                        회사(GRAFT) 첫 화면
+//   GET    /health                  서버 동작 확인
 //   GET    /app                     앱 소개·다운로드 페이지 (카톡으로 보내는 주소)
 //   GET    /privacy                 개인정보처리방침 (플레이스토어 등록용, #delete 는 데이터 삭제 안내)
 //
@@ -49,7 +51,8 @@ async function route(request, db) {
   const method = request.method;
 
   if (method === 'OPTIONS') return new Response(null, { headers: cors() });
-  if (path === '/' && method === 'GET') return text('자동가계부 가족 공유 서버가 동작 중입니다.');
+  if (path === '/health' && method === 'GET') return text('자동가계부 가족 공유 서버가 동작 중입니다.');
+  if (path === '/' && method === 'GET') return html(homePage(), 200, true);
 
   if (path === '/api/households' && method === 'POST') {
     const id = randomToken(12), writeKey = randomToken(32), viewToken = randomToken(22);
@@ -271,8 +274,32 @@ function shell(title, desc, body) {
 <meta property="og:title" content="${title}"><meta property="og:description" content="${desc}">
 <meta property="og:image" content="${IMG}screens/screen1-main-v2.png"><meta property="og:type" content="website">
 <style>${PAGE_CSS}</style></head><body><div class="w">${body}
-<p class="foot">자동가계부 · 문의 <a href="mailto:${CONTACT}">${CONTACT}</a><br><a href="/app">앱 소개</a> · <a href="/privacy">개인정보처리방침</a></p>
+<p class="foot"><a href="/">GRAFT</a> · 자동가계부 · 문의 <a href="mailto:${CONTACT}">${CONTACT}</a><br><a href="/app">앱 소개</a> · <a href="/privacy">개인정보처리방침</a></p>
 </div></body></html>`;
+}
+
+function homePage() {
+  return shell('GRAFT — 생활을 편하게 만드는 작은 앱',
+    'GRAFT 는 일상의 번거로운 일을 자동으로 정리해 주는 모바일 앱을 만듭니다.',
+    `<span class="tag">GRAFT</span>
+<h1>생활을 편하게 만드는<br>작은 앱을 만듭니다</h1>
+<p>GRAFT 는 매일 반복되는 번거로운 일을 자동으로 정리해 주는 모바일 앱을 만드는 팀입니다. 회원가입 없이 바로 쓰고, 내 정보는 내 휴대폰에 두는 앱을 지향합니다.</p>
+
+<h2>앱</h2>
+<div class="card">
+<h3>📒 자동가계부</h3>
+<p>카드 결제 알림을 읽어 지출을 자동으로 기록하고, 달력·그래프·카드별로 정리해 주는 안드로이드 가계부. 가족과 링크 하나로 함께 볼 수 있어요.</p>
+<a class="btn" href="/app">자동가계부 자세히 보기</a>
+</div>
+<div class="card">
+<h3>🗂️ 앨범 박스 <span class="sub">준비 중</span></h3>
+<p>갤러리 사진을 찍은 장소와 출처별로 자동으로 묶어 보여 주는 안드로이드 앱.</p>
+</div>
+
+<h2>회사 정보</h2>
+<div class="card">
+<p>상호: GRAFT<br>대표: SANGWOO LEE<br>이메일: <a href="mailto:${CONTACT}">${CONTACT}</a></p>
+</div>`);
 }
 
 function appPage() {
