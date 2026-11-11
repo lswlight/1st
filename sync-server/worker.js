@@ -350,7 +350,7 @@ function privacyPage() {
   return shell('자동가계부 개인정보처리방침', '자동가계부 앱의 개인정보 처리 항목, 목적, 보관 기간과 삭제 방법 안내',
     `<h1>개인정보처리방침</h1>
 <p class="sub">자동가계부 (Android 앱 및 가족 공유 웹) · 시행일 ${POLICY_DATE}</p>
-<div class="card"><p>GRFAT(이하 '운영자')는 자동가계부 앱(이하 '앱')을 이용하는 분의 개인정보를 소중히 여기며, 「개인정보 보호법」 등 관련 법령을 지킵니다. 앱은 회원가입이 없으며, <b>내역은 기본적으로 이용자의 휴대폰 안에만 저장</b>됩니다. 이용자가 <b>가족 공유</b>를 켠 경우에만 일부 정보가 공유 서버에 저장됩니다.</p></div>
+<div class="card"><p>GRAFT(이하 '운영자')는 자동가계부 앱(이하 '앱')을 이용하는 분의 개인정보를 소중히 여기며, 「개인정보 보호법」 등 관련 법령을 지킵니다. 앱은 회원가입이 없으며, <b>내역은 기본적으로 이용자의 휴대폰 안에만 저장</b>됩니다. 이용자가 <b>가족 공유</b>를 켠 경우에만 일부 정보가 공유 서버에 저장됩니다.</p></div>
 
 <h2>1. 처리하는 정보와 목적</h2>
 <table>
@@ -405,7 +405,7 @@ function privacyPage() {
 
 <h2>9. 개인정보 보호책임자</h2>
 <div class="card">
-<p>상호: GRFAT<br>책임자: SANGWOO LEE (대표)<br>이메일: <a href="mailto:${CONTACT}">${CONTACT}</a></p>
+<p>상호: GRAFT<br>책임자: SANGWOO LEE (대표)<br>이메일: <a href="mailto:${CONTACT}">${CONTACT}</a></p>
 </div>
 
 <h2>10. 권익 침해 구제</h2>
