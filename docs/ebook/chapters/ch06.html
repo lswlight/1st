@@ -1,0 +1,110 @@
+<h2><span class="tag">무엇을 했나</span>내 폰의 기록을 아이폰 가족이 보게 하기</h2>
+<p>여기까지의 자동가계부는 <b>내 폰 안에서만</b> 동작했습니다. 기록이 폰 밖으로 나가지 않으니 안전하지만, 가족은 볼 수 없습니다. 저자의 아내는 아이폰을 쓰기 때문에 앱을 깔 수도 없습니다. 원한 것은 단순했습니다.</p>
+<div class="chat"><div class="cap">실제 요청</div>
+<div class="me"><div class="who">나</div><div class="bubble">나는 남편의 기록을 와이프가 웹이나 어플에 들어가면 바로 볼 수 있는 형태를 원해</div></div>
+</div>
+<p>이를 위해 <b>서버</b>가 필요했습니다. 서버는 인터넷에 항상 켜져 있는 컴퓨터로, 내 폰이 기록을 올려 두면 가족이 언제든 꺼내 볼 수 있게 해 줍니다. 이 장에서는 처음에 쓴 구글 시트 방식이 왜 부족했는지, 그리고 무료 서버로 옮긴 과정을 따라갑니다.</p>
+
+<h2><span class="tag">왜</span>구글 시트에서 전용 서버로 바꾼 이유</h2>
+<p>처음에는 AI가 가장 간단한 방법으로 <b>구글 시트</b>를 제안했습니다. 앱이 기록을 구글 시트에 올리고(Apps Script라는 구글의 작은 프로그램 사용), 가족은 그 시트를 보는 방식입니다. 만들어 써 보니 아쉬움이 컸습니다.</p>
+<div class="chat"><div class="cap">실제 대화 · 방향 바꾸기</div>
+<div class="me"><div class="who">나</div><div class="bubble">결국 내보내기 같다. 남편 기록을 아내가 웹이나 앱에서 바로 보는 형태를 원한다. 다른 사람도 쓰게 할 거라 공유 서버 방식으로 바꿔야 한다.</div></div>
+<div class="me"><div class="who">나</div><div class="bubble">플레이스토어에 올려 다른 사람들도 쓰게 할 계획이야. 공유 서버 방식으로 바꿔야 해.</div></div>
+</div>
+<table>
+<tr><th style="width:22%"></th><th>구글 시트 방식</th><th>전용 서버 방식</th></tr>
+<tr><td>가족이 보는 화면</td><td>표(스프레드시트) 그대로</td><td>가계부 모양의 웹 화면</td></tr>
+<tr><td>처음 설정</td><td>사용자마다 시트·스크립트를 만들어야 함</td><td>앱에서 버튼 한 번</td></tr>
+<tr><td>다른 사람에게 배포</td><td>사람마다 설정을 해 줘야 해서 어려움</td><td>누구나 같은 서버를 씀</td></tr>
+<tr><td>비용</td><td>무료</td><td>무료 한도 안(하루 10만 요청)</td></tr>
+</table>
+<p>결정적인 이유는 <b>"다른 사람도 쓰게 할 것"</b>이었습니다. 나 혼자 쓰는 앱이라면 시트도 괜찮지만, 플레이스토어에 올릴 앱이라면 사용자가 아무 설정 없이 버튼만 누르면 되어야 합니다. 이처럼 <b>앱의 목표가 바뀌면 구조도 바뀌어야 합니다.</b> 목표가 바뀐 순간 AI에게 그 사실을 알려 주세요.</p>
+
+<h2><span class="tag">구조</span>Cloudflare Workers + D1, 쉬운 말로</h2>
+<p>AI가 고른 서버는 <b>Cloudflare</b>의 무료 서비스 두 가지입니다.</p>
+<table>
+<tr><th style="width:26%">이름</th><th>쉬운 뜻</th></tr>
+<tr><td>Workers</td><td>서버 프로그램을 올려 두는 곳. 내가 컴퓨터를 켜 둘 필요 없이 Cloudflare가 대신 24시간 돌려 줍니다. 무료로 하루 10만 요청.</td></tr>
+<tr><td>D1</td><td>서버용 데이터베이스(기록 보관함). 무료로 5GB 저장.</td></tr>
+<tr><td>바인딩</td><td>Worker가 D1을 쓸 수 있게 이어 주는 연결선. 이름을 <code>DB</code>로 붙입니다.</td></tr>
+</table>
+<div class="flow">
+  <div class="s"><b>남편 폰(앱)</b>결제 기록 시<br>자동으로 올림</div><div class="arrow">›</div>
+  <div class="s"><b>서버(Workers)</b>가족 방별로<br>D1에 저장</div><div class="arrow">›</div>
+  <div class="s"><b>아내(아이폰·PC)</b>보기 링크를<br>웹으로 열기</div>
+</div>
+<h3>보안을 위해 정한 것</h3>
+<ul>
+<li><b>가족 방마다 열쇠 두 개</b>: 기록을 올리는 <b>쓰기 키</b>(앱만 가짐)와 보기만 하는 <b>보기 링크</b>.</li>
+<li>쓰기 키는 서버에 원래 값이 아니라 <b>해시</b><span class="gloss">(원래 값을 알아낼 수 없게 바꾼 지문)</span>로만 저장.</li>
+<li>보기 링크는 <code>https://graftkorea.com/v/…</code> 뒤에 <b>추측하기 어려운 무작위 값</b>이 붙음.</li>
+<li>서버에는 이름(예: 남편)·사용처·금액·카드·시각만 보냄. <b>원본 알림 문구·전화번호·계좌번호는 보내지 않음.</b></li>
+<li><b>[가족 공유 끄기]</b>를 누르면 서버의 가족 방과 내역이 모두 지워지고, 보낸 링크도 더 이상 열리지 않음.</li>
+</ul>
+<div class="box note"><span class="h">이 결정들이 나중에 그대로 쓰였다</span>
+플레이스토어의 '데이터 보안' 설문(10장)에서 "어떤 데이터를 보내나", "삭제할 수 있나", "전송 중 암호화하나"를 묻습니다. 처음부터 보내는 정보를 줄이고 삭제 기능을 만들어 둔 덕분에 설문에 그대로 답할 수 있었습니다.
+</div>
+
+<h2><span class="tag">따라 하기</span>가족 공유를 쓰는 법 (사용자 입장)</h2>
+<div class="side"><fig src="screen5-family-v3.png" cap="앱의 [가족] 탭"></fig>
+<div class="txt"><ol class="steps">
+<li><b>[가족] 탭 → [가족 공유 시작하기]</b>내 이름(예: 남편)을 넣고 시작을 누르면 서버에 가족 방이 만들어집니다.</li>
+<li><b>보기 링크를 카카오톡으로 보내기</b>만들어진 링크를 가족에게 보냅니다.</li>
+<li><b>가족은 링크를 열기만 하면 끝</b>가입·설치가 필요 없습니다. 아이폰은 사파리에서 열고 공유 → <b>홈 화면에 추가</b>하면 앱처럼 열립니다.</li>
+<li><b>안드로이드 가족도 함께 기록하려면</b>[공유 설정] → 초대 코드 보내기 → 가족 폰의 [가족] 탭 → 받은 링크·초대 코드로 참여하기.</li>
+</ol></div></div>
+<div class="side"><fig src="screen6-family-web.png" cap="보기 링크로 연 웹 화면(아이폰·PC)"></fig>
+<div class="txt"><h4>가족이 보는 웹 화면</h4>
+<ul>
+<li><b>이번 달 남은 돈</b>과 수입·지출 합계</li>
+<li><b>사람별</b>: 남편·아내처럼 누가 얼마나 썼는지</li>
+<li><b>카드별 실제 지출</b></li>
+<li><b>내역</b>: 날짜별로 사용처·시각·사람·카드</li>
+<li><b>[새로고침]</b>을 누르면 최신 기록. 결제는 기록될 때마다 자동으로 올라가고, 실패하면 다음에 다시 보냅니다.</li>
+</ul>
+<p>아이폰 가족은 앱을 깔 수 없지만, 이 화면을 홈 화면에 추가해 두면 앱처럼 씁니다. 저자의 아내도 이렇게 씁니다.</p></div></div>
+
+<h2><span class="tag">따라 하기</span>서버를 직접 만들기 (처음 한 번, PC로 10분)</h2>
+<p>처음에는 저자가 Cloudflare 대시보드에서 직접 서버를 만들었습니다. AI가 단계별로 알려 주었고, 서버 코드(<code>worker.js</code> 파일 하나)는 AI가 만들어 저장소에 넣어 두었습니다. 화면 메뉴 이름은 Cloudflare가 자주 바꾸니, 다르면 AI에게 지금 보이는 화면을 캡처해 보내세요.</p>
+<ol class="steps">
+<li><b>Cloudflare 가입과 로그인</b>dash.cloudflare.com. 2단계 인증을 켭니다.</li>
+<li><b>D1 데이터베이스 만들기</b>Storage &amp; Databases → <b>D1 SQL Database → Create</b> → 이름 <code>moneybook</code> → Create.</li>
+<li><b>Worker 만들기</b>Compute(Workers) → Workers &amp; Pages → <b>Create → Worker</b> → 'Hello World' 선택 → 이름 <code>moneybook-sync</code> → Deploy.</li>
+<li><b>코드 붙여 넣기</b><b>Edit code</b> → 기본 코드를 모두 지우고 저장소의 <code>sync-server/worker.js</code> 내용을 통째로 붙여 넣기 → Deploy.</li>
+<li><b>D1 연결(바인딩)</b>Worker 화면 → Settings → <b>Bindings → Add → D1 database</b> → 변수 이름 <b><code>DB</code></b>, 데이터베이스 <code>moneybook</code> 선택 → Deploy.</li>
+<li><b>동작 확인</b><code>https://moneybook-sync.&lt;내계정&gt;.workers.dev</code>를 브라우저로 열어 "자동가계부 가족 공유 서버가 동작 중입니다."가 보이면 성공. 표는 첫 요청 때 자동으로 만들어집니다.</li>
+<li><b>앱에 서버 주소 넣기</b>AI에게 "서버 주소는 ○○야, 앱 기본값으로 넣어 줘"라고 하면 다음 빌드부터 반영됩니다.</li>
+</ol>
+<div class="box warn"><span class="h">바인딩 이름은 정확히 DB</span>
+서버 코드는 데이터베이스를 <code>DB</code>라는 이름으로 찾습니다. 변수 이름을 <code>db</code>나 <code>moneybook</code>으로 하면 서버가 데이터베이스를 못 찾습니다. 대소문자까지 똑같이 넣으세요.
+</div>
+
+<h2><span class="tag">바이브 코딩</span>"니가 해줄 수 없나?": 배포를 AI에게 맡기기</h2>
+<p>서버 코드를 고칠 때마다 대시보드에 들어가 코드를 다시 붙여 넣는 일이 번거로웠습니다. 그래서 물었습니다.</p>
+<div class="chat"><div class="cap">대화 · 반복 작업 넘기기 (내 말은 원문, AI 답은 요약)</div>
+<div class="me"><div class="who">나</div><div class="bubble">니가 해줄 수 없나?</div></div>
+<div class="ai"><div class="who">AI</div><div class="bubble">Cloudflare에서 <b>API 토큰</b>을 만들어 주시면 제가 직접 배포할 수 있습니다. 필요한 권한만 담은 토큰을 만들고, 채팅창이 아니라 보안 입력창으로 전달해 주세요. 작업이 끝나면 토큰을 지우면 됩니다.</div></div>
+</div>
+<p><b>API 토큰</b>은 "이 프로그램에게 내 계정의 이 일만 허락한다"는 출입증입니다. 비밀번호와 달리 권한을 좁게 줄 수 있고, 언제든 지울 수 있습니다. 저자는 이 토큰을 회사 Cloudflare 계정으로 서버를 옮길 때 만들었고, 그 뒤로는 서버 코드 수정·배포·도메인 연결까지 AI가 했습니다. 토큰 만드는 화면은 <b>7장</b>에서 단계별로 보여 줍니다.</p>
+<div class="box danger"><span class="h">토큰은 채팅에 붙여 넣지 않는다</span>
+API 토큰은 비밀번호와 같습니다. 채팅창에 붙여 넣으면 대화 기록에 남습니다. Claude Code 클라우드 세션은 <b>보안 입력창</b>(환경의 비밀값 설정)을 띄워 주므로 거기에 넣으세요. 저장소 파일에도 절대 넣지 않습니다. 작업이 끝나면 Cloudflare에서 토큰을 삭제합니다.
+</div>
+
+<h2><span class="tag">막혔던 점</span>서버를 만들며 겪은 것</h2>
+<div class="trouble"><div class="q">대시보드 메뉴 이름이 안내와 다르다</div>
+<div class="a"><p>클라우드 서비스의 화면은 자주 바뀝니다. 안내한 메뉴가 안 보이면 지금 화면을 캡처해 "이 화면에서 어디를 눌러?"라고 물어보세요. 메뉴 이름보다 화면 한 장이 빠릅니다.</p></div></div>
+<div class="trouble"><div class="q">서버 주소가 'workers.dev'라 길고 낯설다</div>
+<div class="a"><p>가족에게 보내는 링크가 낯선 주소면 의심받기 쉽습니다. 나중에 회사 도메인 <code>graftkorea.com</code>을 사서 같은 서버에 연결했고(7장), 보기 링크도 <code>https://graftkorea.com/v/…</code>로 바뀌었습니다. 같은 서버가 회사 첫 화면(<code>/</code>), 앱 소개(<code>/app</code>), 개인정보처리방침(<code>/privacy</code>), 이용약관(<code>/terms</code>), 서버 확인(<code>/health</code>)까지 함께 맡습니다.</p></div></div>
+<div class="trouble"><div class="q">AI가 서버가 잘 도는지 어떻게 알지?</div>
+<div class="a"><p>AI에게 "앱이 바뀔 때마다 서버도 실제로 동작하는지 자동으로 확인해 줘"라고 했습니다. 그래서 GitHub Actions가 빌드할 때마다 가족 방 만들기 → 기록 올리기 → 받기 → 삭제까지 실제로 해 보고 결과를 남깁니다. 사람은 초록 체크만 보면 됩니다.</p></div></div>
+
+<div class="checklist"><span class="h">6장 체크리스트</span>
+<ul>
+<li>앱의 목표(나만 쓰기 / 남도 쓰기)가 바뀌면 AI에게 알렸다</li>
+<li>서버로 보내는 정보를 최소로 정했다(원본 문구·계좌번호 제외)</li>
+<li>공유 끄기 = 서버 기록 삭제가 되도록 만들었다</li>
+<li>Cloudflare에 D1 → Worker → 코드 → 바인딩(DB) 순서로 서버를 만들었다</li>
+<li>서버 주소를 브라우저로 열어 동작을 확인했다</li>
+<li>AI에게 배포를 맡길 땐 권한을 좁힌 API 토큰을 보안 입력창으로 전달하고, 끝나면 삭제한다</li>
+</ul>
+</div>
