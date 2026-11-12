@@ -11,8 +11,8 @@ android {
         applicationId = "com.lswlight.moneybook"
         minSdk = 26
         targetSdk = 36
-        versionCode = 31
-        versionName = "2.7"
+        versionCode = 32
+        versionName = "2.8"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

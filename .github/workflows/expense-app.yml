@@ -140,6 +140,8 @@ jobs:
           working-directory: expense-app
           script: |
             adb install -r app-debug.apk
+            # 스토어 스크린샷에 '자동 감지 꺼짐' 안내가 나오지 않게 알림 접근을 미리 허용한다
+            adb shell cmd notification allow_listener com.lswlight.moneybook/com.lswlight.moneybook.CardNotificationListener || true
             adb shell am start -W -n com.lswlight.moneybook/.MainActivity
             sleep 5
             adb shell pidof com.lswlight.moneybook
