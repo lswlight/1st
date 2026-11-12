@@ -243,7 +243,7 @@ ${ownerHtml ? `<h2>사람별</h2><div class="card">${ownerHtml}</div>` : ''}
 const APP_VERSION = '2.6';
 const APK_URL = 'https://github.com/lswlight/1st/releases/download/moneybook-latest/moneybook.apk';
 const IMG = 'https://raw.githubusercontent.com/lswlight/1st/40687aad10bc002e3649185d854fe9916907e48f/expense-app/docs/';
-const CONTACT = 'lswlight@gmail.com';
+const CONTACT = 'graft.korea@gmail.com';
 const POLICY_DATE = '2026년 11월 4일';
 
 const PAGE_CSS = `*{box-sizing:border-box;margin:0;padding:0}
