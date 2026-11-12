@@ -142,6 +142,10 @@ jobs:
             adb install -r app-debug.apk
             # 스토어 스크린샷에 '자동 감지 꺼짐' 안내가 나오지 않게 알림 접근을 미리 허용한다
             adb shell cmd notification allow_listener com.lswlight.moneybook/com.lswlight.moneybook.CardNotificationListener || true
+            # 스토어 스크린샷 규격(9:16, 1080px 이상)으로 캡처되게 화면 크기를 맞춘다
+            adb shell wm size 1080x1920
+            adb shell wm density 420
+            sleep 3
             adb shell am start -W -n com.lswlight.moneybook/.MainActivity
             sleep 5
             adb shell pidof com.lswlight.moneybook
