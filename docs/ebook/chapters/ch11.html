@@ -1,0 +1,123 @@
+<h2>A. 전 과정 체크리스트</h2>
+<p>처음부터 따라 할 때 이 목록을 옆에 두고 하나씩 지워 가세요. 괄호 안은 자세한 설명이 있는 장입니다.</p>
+
+<div class="checklist"><span class="h">준비 (1장)</span><ul>
+<li>만들 앱을 "직접 할 것 / 자동으로 될 것 / 뺄 것"으로 한 문단에 정리했다</li>
+<li>Claude 유료 요금제, GitHub 계정·저장소, Claude–GitHub 연결</li>
+<li>설치해 볼 안드로이드 폰</li>
+</ul></div>
+<div class="checklist"><span class="h">만들고 설치하기 (2~3장)</span><ul>
+<li>첫 요청 + "PC에 아무것도 안 깔고 링크로 설치" + "항상 같은 서명"</li>
+<li>GitHub Actions 빌드 성공, 고정 다운로드 링크</li>
+<li>폰 설치(출처 허용, Play 프로텍트·자동 차단 잠시 끄기), 알림 접근 허용</li>
+</ul></div>
+<div class="checklist"><span class="h">고치고 키우기 (4~5장)</span><ul>
+<li>진단 화면(받은 원문 + 처리 결과)</li>
+<li>고친 사례는 테스트에 추가</li>
+<li>화면·디자인은 캡처와 시안으로 대화</li>
+<li>만들지 않을 기능은 과감히 접기</li>
+</ul></div>
+<div class="checklist"><span class="h">서버 (6장, 필요할 때)</span><ul>
+<li>보내는 정보 최소화, 공유 끄기 = 서버 삭제</li>
+<li>Cloudflare D1 + Workers + 바인딩 DB</li>
+<li>API 토큰은 보안 입력창으로, 작업 후 삭제</li>
+</ul></div>
+<div class="checklist"><span class="h">회사와 계정 (7~8장, 조직 계정일 때)</span><ul>
+<li>D-U-N-S 신청(가장 먼저), 회사 구글 계정(2단계 인증)</li>
+<li>도메인 구입, 회사 사이트·/privacy·/terms, 연락처는 회사 메일</li>
+<li>Search Console 도메인 인증</li>
+<li>Play Console 가입(25달러), 개발자 이름, 웹사이트 인증, 판매자 선언, 전화 인증</li>
+</ul></div>
+<div class="checklist"><span class="h">출시 (9~10장)</span><ul>
+<li>대상 API 기준 충족(2026년: API 36), 최신 에뮬레이터 화면 확인</li>
+<li>패키지 이름 확정, 업로드 키 → GitHub Secrets 4개, AAB 빌드</li>
+<li>무료/유료, 앱 이름, 카테고리</li>
+<li>아이콘 512, 그래픽 1024×500, 스크린샷 1080×1920 4장 이상, AI 애셋 라벨</li>
+<li>내부 테스트 설치 확인 → 등록정보 → 앱 콘텐츠 → 프로덕션(국가) → 검토 제출</li>
+</ul></div>
+
+<h2>B. 비용 정리</h2>
+<table>
+<tr><th>항목</th><th>비용</th><th>비고</th></tr>
+<tr><td>Google Play 개발자 등록</td><td>25달러</td><td>1회</td></tr>
+<tr><td>도메인 graftkorea.com (Cloudflare)</td><td>연 11.17달러</td><td>.com 도매가</td></tr>
+<tr><td>서버 (Cloudflare Workers + D1)</td><td>무료</td><td>하루 10만 요청, 저장 5GB 무료 한도 안</td></tr>
+<tr><td>빌드 (GitHub Actions)</td><td>무료</td><td>공개 저장소 기준</td></tr>
+<tr><td>D-U-N-S 번호</td><td>무료</td><td>발급 며칠~몇 주</td></tr>
+<tr><td>Claude 구독</td><td>사용하는 요금제</td><td>Claude Code를 쓰려면 유료 요금제</td></tr>
+<tr><td colspan="3"><b>AI 구독료를 빼면 첫해 약 36달러</b>(등록비 25 + 도메인 11.17)</td></tr>
+</table>
+<p class="small">가격은 2026년 11월 기준이며 바뀔 수 있습니다.</p>
+
+<h2>C. 자주 막히는 지점 Q&amp;A</h2>
+<table>
+<tr><th style="width:36%">이럴 때</th><th>이렇게</th></tr>
+<tr><td>"앱이 설치되지 않았습니다"</td><td>Play 프로텍트·보안 위험 자동 차단을 잠시 끄기. 업데이트 때라면 서명이 같은지 AI에게 확인(3장)</td></tr>
+<tr><td>알림 접근 스위치가 회색</td><td>설정 → 애플리케이션 → 앱 → ⋮ → 제한된 설정 허용(3장)</td></tr>
+<tr><td>결제가 기록 안 됨</td><td>'최근 감지 알림'에서 받았는지 확인 → 캡처를 AI에게(4장)</td></tr>
+<tr><td>고쳤다는데 그대로</td><td>빌드 완료(초록 체크) 확인, 덮어 설치, [놓친 결제 다시 읽기](4장)</td></tr>
+<tr><td>새 도메인이 폰에서 안 열림</td><td>DNS 반영 대기, 비행기 모드, 개인 DNS(7장)</td></tr>
+<tr><td>401 오류인데 인증은 됨</td><td>실제 DNS의 TXT 기록과 Search Console 상태를 확인(7장)</td></tr>
+<tr><td>노션 주소로 웹사이트 인증 실패</td><td>내 도메인을 사서 Search Console 인증(7~8장)</td></tr>
+<tr><td>비밀값 저장이 AI에게 막힘</td><td>정상. 사람이 GitHub Secrets에 직접 입력. 채팅에 붙여 넣지 않기(9장)</td></tr>
+<tr><td>가독화 파일 경고</td><td>난독화를 안 했으면 무시(10장)</td></tr>
+<tr><td>테스터 "항목을 찾을 수 없습니다"</td><td>참여 링크로 '테스터 되기' → 스토어 계정 확인 → 대기(10장)</td></tr>
+<tr><td>[검토를 위해 앱 전송]이 회색</td><td>대시보드의 남은 필수 항목 끝내기(10장)</td></tr>
+<tr><td>AI가 영어로 답함</td><td>"한국어로 답해 줘"</td></tr>
+<tr><td>AI 답이 어려움</td><td>"코딩 모르는 사람한테 설명하듯, 내가 할 일만 알려 줘"</td></tr>
+</table>
+
+<h2>D. AI에게 실제로 한 말 모음</h2>
+<p>이 책에 나온 저자의 실제 발화를 모았습니다. 기술 용어가 하나도 없다는 데 주목하세요.</p>
+<table>
+<tr><th style="width:62%">한 말</th><th>상황</th></tr>
+<tr><td>"나는 수입 지출 앱을 만들고 싶어. 다른 복잡한 기능은 빼고 … 알림이 날라오면 이를 캐치하고 자동으로 바로 기입을 하는 형태의 어플을 만들고 싶어."</td><td>첫 요청(2장)</td></tr>
+<tr><td>"문자로 오는 것은 정상적으로 잘 되고 카카오톡으로 오는 것은 안 돼."</td><td>버그 보고(4장)</td></tr>
+<tr><td>"하나카드의 해외카드 결제가 방금 이루어졌는데 반영이 되지 않았어"</td><td>버그 보고(4장)</td></tr>
+<tr><td>"환율을 연동할 수 있는 방법이 있어?" / "수수료는 여유있게 2%로 하자"</td><td>가능 여부 묻고 결정(5장)</td></tr>
+<tr><td>"카드 혜택에서 … 할인받은 금액은 -(음수)로 알람이 오니 +수입 처리가 되어야 하는데 지출 처리가 되었어."</td><td>기대와 실제(4장)</td></tr>
+<tr><td>"체크카드의 경우 사용시 입출금 형태로 되는데 일반 계좌 이체랑 구분할 수 있나?"</td><td>문제 제기(5장)</td></tr>
+<tr><td>"승인 알림이 있어. 이걸 기준으로 체크카드 사용을 구분할 수 있지 않을까?"</td><td>사용자 아이디어(5장)</td></tr>
+<tr><td>"내가 보낸 사진 그대로 썼네. 난 보기 좋게 사진에다가 가이드 안내글 적어줄 수 있을 줄 알았어"</td><td>결과물 피드백(3장)</td></tr>
+<tr><td>"첫 사진 보면 … 너무 타이트해 … 글자가 겹쳐 … 되돌아가는 버튼도 필요한 거 같아."</td><td>화면 피드백(5장)</td></tr>
+<tr><td>"나는 남편의 기록을 와이프가 웹이나 어플에 들어가면 바로 볼 수 있는 형태를 원해"</td><td>목표 설명(6장)</td></tr>
+<tr><td>"플레이스토어에 올려 다른 사람들도 쓰게 할 계획이야. 공유 서버 방식으로 바꿔야 해."</td><td>목표 변경(6장)</td></tr>
+<tr><td>"니가 해줄 수 없나?"</td><td>반복 작업 넘기기(6장)</td></tr>
+<tr><td>"앱 아이콘 이미지 멋있는 디자인 없어?" → "B로 하고 싶어"</td><td>시안 고르기(9장)</td></tr>
+<tr><td>"안 되겠네 안 하는 게 낫겠네"</td><td>기능 보류(5장)</td></tr>
+</table>
+
+<h2>E. 용어집</h2>
+<table>
+<tr><th style="width:26%">용어</th><th>쉬운 뜻</th></tr>
+<tr><td>바이브 코딩</td><td>코드를 직접 쓰지 않고 AI에게 말로 설명해 프로그램을 만드는 방식</td></tr>
+<tr><td>Claude Code</td><td>코드를 다루는 Claude. 클라우드 세션은 인터넷 저편 컴퓨터에서 작업</td></tr>
+<tr><td>GitHub / 저장소</td><td>코드를 보관하는 인터넷 창고 / 프로젝트 폴더 하나</td></tr>
+<tr><td>커밋·푸시</td><td>바뀐 코드를 기록하고(커밋) 저장소에 올리기(푸시)</td></tr>
+<tr><td>GitHub Actions</td><td>코드가 바뀔 때마다 테스트·빌드를 자동으로 하는 GitHub 기능</td></tr>
+<tr><td>빌드</td><td>코드를 설치 파일로 바꾸는 작업</td></tr>
+<tr><td>APK</td><td>안드로이드 앱 설치 파일</td></tr>
+<tr><td>AAB</td><td>플레이스토어 업로드용 앱 파일(App Bundle)</td></tr>
+<tr><td>서명 / 업로드 키</td><td>앱을 누가 만들었는지 증명하는 디지털 도장 / 스토어에 올릴 때 쓰는 내 도장</td></tr>
+<tr><td>패키지 이름</td><td>앱의 고유 ID(예: com.graftkorea.moneybook). 첫 업로드 후 변경 불가</td></tr>
+<tr><td>API 레벨 / targetSdk</td><td>안드로이드 버전 번호 / 앱이 기준으로 삼는 버전(Android 16 = 36)</td></tr>
+<tr><td>에뮬레이터</td><td>컴퓨터 안의 가상 휴대폰</td></tr>
+<tr><td>edge-to-edge</td><td>화면을 상태 표시줄·내비게이션 바 뒤까지 꽉 채워 그리는 방식</td></tr>
+<tr><td>알림 접근</td><td>다른 앱의 알림을 함께 받아 보는 안드로이드 권한</td></tr>
+<tr><td>정규식</td><td>글자에서 원하는 모양(예: 숫자+원)을 찾는 규칙</td></tr>
+<tr><td>서버</td><td>인터넷에 항상 켜져 있는 컴퓨터</td></tr>
+<tr><td>Workers / D1</td><td>Cloudflare의 서버 프로그램 실행 서비스 / 데이터베이스</td></tr>
+<tr><td>API 토큰</td><td>프로그램에게 내 계정의 정해진 일만 허락하는 출입증</td></tr>
+<tr><td>해시</td><td>원래 값을 알아낼 수 없게 바꾼 지문</td></tr>
+<tr><td>도메인 / DNS</td><td>인터넷 주소(graftkorea.com) / 주소를 서버 위치로 바꿔 주는 전화번호부</td></tr>
+<tr><td>TXT 기록</td><td>DNS에 적어 두는 글자 메모. 소유 인증에 씀</td></tr>
+<tr><td>D-U-N-S</td><td>기업마다 붙는 9자리 고유 번호. 조직 계정 가입에 필요</td></tr>
+<tr><td>GitHub Secrets</td><td>비밀번호·키를 숨겨 두는 저장소 금고</td></tr>
+<tr><td>내부 테스트 / 프로덕션</td><td>지정한 사람만 받는 테스트 배포 / 모든 사용자에게 공개하는 배포</td></tr>
+<tr><td>판매자(Trader)</td><td>앱을 사업으로 내는 개발자. EU에 연락처 공개</td></tr>
+<tr><td>관리형 게시</td><td>심사 통과 후 내가 직접 [게시]를 눌러야 공개되게 하는 설정</td></tr>
+</table>
+
+<hr>
+<p class="small">이 책에 나온 회사 연락처: graft.korea@gmail.com · https://graftkorea.com<br>
+화면 캡처의 개인정보(계정 ID, 개인 이름·메일, 인증 값 등)는 흐리게 처리했습니다. Google Play Console, Cloudflare, GitHub 등의 화면과 메뉴 이름은 2026년 11월 기준이며 바뀔 수 있습니다.</p>

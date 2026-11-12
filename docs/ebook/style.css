@@ -54,12 +54,12 @@ code, .mono { font-family: "Pretendard", monospace; background: #f1f3f2; border-
 .cover h1 { font-size: 30pt; line-height: 1.28; margin: 5mm 0 6mm; font-weight: 800; letter-spacing: -0.02em; }
 .cover h1 em { font-style: normal; color: var(--green); }
 .cover .desc { font-size: 11pt; color: var(--sub); line-height: 1.7; }
-.cover .phones { position: absolute; right: 14mm; bottom: 20mm; display: flex; gap: 4mm; align-items: flex-end; }
-.cover .phones img { width: 36mm; border-radius: 4mm; box-shadow: 0 3mm 8mm rgba(0,0,0,.25); border: 1.2mm solid #fff; }
-.cover .phones img.mid { width: 40mm; }
+.cover .phones { position: absolute; right: 12mm; bottom: 18mm; display: flex; gap: 4mm; align-items: flex-end; }
+.cover .phones img { width: 28mm; border-radius: 4mm; box-shadow: 0 3mm 8mm rgba(0,0,0,.25); border: 1.2mm solid #fff; }
+.cover .phones img.mid { width: 32mm; }
 .cover .brand { position: absolute; left: 18mm; bottom: 20mm; color: #fff; }
 .cover .brand .icon { width: 16mm; border-radius: 3.5mm; display: block; margin-bottom: 4mm; }
-.cover .brand b { font-size: 12pt; display: block; }
+.cover .brand b { font-size: 11pt; display: block; }
 .cover .brand span { font-size: 9pt; opacity: .85; }
 
 /* ---------- 목차 ---------- */
@@ -202,3 +202,4 @@ figure .shot img { max-height: 175mm; width: auto; max-width: 100%; }
 .side > .txt { flex: 1; }
 .side.wide > figure { flex-basis: 56%; }
 .row.short figure .shot img { max-height: 90mm; }
+.row figure.narrow { flex: 0 0 30%; }

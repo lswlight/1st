@@ -1,0 +1,134 @@
+<h2><span class="tag">무엇을 했나</span>'내 폰용 앱'을 '스토어용 앱'으로</h2>
+<p>지금까지는 링크로 직접 설치하는 앱이었습니다. 플레이스토어에 올리려면 몇 가지를 바꾸고 준비해야 합니다.</p>
+<table>
+<tr><th style="width:30%">준비할 것</th><th>왜</th></tr>
+<tr><td>Android 16(API 36) 대상</td><td>2026년 8월 31일부터 새 앱은 Android 16 대상이 필수</td></tr>
+<tr><td>패키지 이름</td><td>앱의 고유 ID. 첫 업로드 후에는 영원히 못 바꿈</td></tr>
+<tr><td>업로드 키와 AAB</td><td>스토어에 올리는 파일 형식과 서명</td></tr>
+<tr><td>가격·앱 이름·카테고리</td><td>무료/유료는 나중에 바꾸기 어려움</td></tr>
+<tr><td>아이콘·그래픽 이미지·스크린샷</td><td>스토어 화면을 꾸미는 이미지</td></tr>
+</table>
+
+<h2><span class="tag">따라 하기</span>① Android 16(API 36) 대상으로 올리기</h2>
+<p>구글은 매년 "새 앱은 최신 안드로이드 버전을 대상으로 만들어야 한다"는 기준을 올립니다. 2026년 8월 31일부터는 <b>Android 16, 즉 API 36</b>입니다. 'API 레벨'은 안드로이드 버전마다 붙은 번호라고 생각하면 됩니다.</p>
+<div class="chat"><div class="cap">요청 예시</div>
+<div class="me"><div class="who">나</div><div class="bubble">플레이스토어에 올리려고 해. 지금 새 앱이 지켜야 하는 대상 API 기준에 맞춰 줘. 바뀌는 화면 문제가 있으면 같이 고치고, 최신 안드로이드 에뮬레이터에서 화면도 확인해 줘.</div></div>
+</div>
+<p>AI가 한 일은 다음과 같습니다. 이름은 몰라도 되지만, 이런 일이 필요하다는 것만 알아 두세요.</p>
+<ul>
+<li><b>compileSdk·targetSdk를 36으로</b>: 앱이 Android 16 기준으로 동작한다고 선언.</li>
+<li><b>빌드 도구(AGP) 업그레이드</b>: 새 기준에 맞는 빌드 도구로 교체.</li>
+<li><b>화면 끝까지 그리기(edge-to-edge) 대응</b>: 상단·하단이 시스템 바와 겹치지 않게 여백 처리(5장 그림).</li>
+<li><b>Android 16 에뮬레이터에서 실제로 띄워 화면 확인</b>: GitHub Actions에서 가상 폰을 켜고 설치·실행·캡처까지 자동으로.</li>
+</ul>
+<div class="box note"><span class="h">기준 날짜는 해마다 바뀝니다</span>
+이 책을 읽는 시점에는 기준이 더 올라가 있을 수 있습니다. AI에게 "지금 기준이 뭔지 확인해 줘"라고 먼저 물어보세요. Play Console도 기준에 못 미치는 AAB는 업로드 단계에서 거부합니다.
+</div>
+
+<h2><span class="tag">따라 하기</span>② 패키지 이름: 한 번 정하면 영원히</h2>
+<p><b>패키지 이름</b>(applicationId)은 앱의 주민등록번호 같은 고유 ID입니다. 스토어 주소(<code>play.google.com/store/apps/details?id=…</code>)에도 들어가고, <b>첫 업로드 후에는 바꿀 수 없습니다.</b> 보통 회사 도메인을 거꾸로 쓰고 앱 이름을 붙입니다.</p>
+<table>
+<tr><th style="width:42%">패키지 이름</th><th>용도</th></tr>
+<tr><td><code>com.lswlight.moneybook</code></td><td>지금까지 링크로 설치하던 앱(가족용). 그대로 유지</td></tr>
+<tr><td><code><b>com.graftkorea.moneybook</b></code></td><td>플레이스토어용 새 앱(회사 도메인 기반)</td></tr>
+</table>
+<p>기존 앱의 이름을 바꾸면 이미 깔려 있는 가족 폰의 앱이 '다른 앱'이 되어 업데이트가 안 되고, 지우고 새로 깔면 기록이 사라집니다. 그래서 <b>예전 앱은 예전 이름 그대로 두고</b>, 스토어용은 새 이름으로 따로 빌드했습니다. 그 결과 저자 폰에는 두 앱이 따로 설치됩니다(테스트할 때 헷갈리지 않게 주의).</p>
+<div class="chat"><div class="cap">요청 예시</div>
+<div class="me"><div class="who">나</div><div class="bubble">플레이스토어용은 com.graftkorea.moneybook으로 하고, 가족이 쓰는 기존 APK는 예전 이름 그대로 둬서 데이터가 유지되게 해 줘.</div></div>
+</div>
+
+<h2><span class="tag">따라 하기</span>③ 업로드 키와 AAB</h2>
+<h3>AAB와 두 개의 키</h3>
+<p>플레이스토어에는 APK가 아니라 <b>AAB</b>(Android App Bundle, 스토어 업로드용 앱 파일)를 올립니다. 구글이 AAB를 받아 사용자 폰에 맞는 APK를 만들어 줍니다. 서명은 두 단계입니다.</p>
+<div class="flow">
+  <div class="s"><b>업로드 키</b>(내가 보관)<br>AAB에 서명해서<br>"내가 올렸다" 증명</div><div class="arrow">›</div>
+  <div class="s"><b>Google Play</b>업로드 키 확인 후<br>내 서명을 벗기고</div><div class="arrow">›</div>
+  <div class="s"><b>앱 서명 키</b>(구글이 보관)<br>사용자에게 배포되는<br>최종 서명</div>
+</div>
+<p>이것을 <b>Google Play 앱 서명</b>이라고 합니다. 진짜 중요한 배포 키는 구글이 안전하게 보관하고, 나는 업로드 키만 관리합니다. 업로드 키를 잃어버려도 구글에 요청해 바꿀 수 있습니다.</p>
+
+<h3>업로드 키 만들기와 자동 빌드</h3>
+<ol class="steps">
+<li><b>AI에게 업로드 키 생성과 AAB 자동 빌드 요청</b>"플레이스토어용 업로드 키를 만들고, GitHub Actions에서 AAB를 자동으로 만들어 줘. 키와 비밀번호는 저장소에 넣지 말고 GitHub Secrets에서 읽게 해 줘."</li>
+<li><b>AI가 키 파일과 비밀번호를 만들어 안전하게 전달</b>키 파일(키스토어)은 GitHub Secrets에 넣을 수 있게 글자(base64)로 바꾼 값으로 받습니다. 이 값들은 <b>비밀번호 관리자 등 안전한 곳에 따로 보관</b>하세요.</li>
+<li><b>GitHub Secrets에 4개 직접 입력</b>(아래 따라 하기)</li>
+<li><b>빌드 확인</b>Secrets가 있으면 Actions가 AAB를 만들어 <b>Artifacts</b>(로그인한 저장소 관리자만 받을 수 있는 보관함)에 올립니다. 누구나 받는 Releases 링크에는 올리지 않습니다.</li>
+</ol>
+
+<div class="trouble"><div class="q">AI가 GitHub Secrets에 비밀값을 넣으려다 막혔다</div>
+<div class="a"><p>AI는 보안 정책상 저장소의 비밀값 설정을 직접 바꿀 수 없었습니다. 이것은 고장이 아니라 <b>올바른 안전장치</b>입니다. 비밀값은 사람이 GitHub 설정 화면에서 직접 넣었습니다.</p></div></div>
+
+<h3>GitHub Secrets에 직접 넣기</h3>
+<fig src="gh-01-actions-secrets.png" crop="0,0,1690,940" w="96%" marks="858,62,94,38,1;322,795,258,32,2;996,647,166,36,3" cap="저장소 → <b>①</b> Settings → <b>②</b> Secrets and variables → Actions → <b>③</b> New repository secret"></fig>
+<ol class="steps">
+<li><b>GitHub 저장소 → Settings</b>(저장소 관리자만 보입니다)</li>
+<li><b>왼쪽 메뉴 Secrets and variables → Actions</b></li>
+<li><b>New repository secret</b>을 눌러 이름(Name)과 값(Secret)을 넣고 Add secret. 아래 4개를 반복합니다. 이름은 AI가 정한 것과 <b>글자 하나까지 똑같이</b> 넣어야 합니다.</li>
+</ol>
+<table>
+<tr><th style="width:40%">이름(Name)</th><th>값(Secret)</th></tr>
+<tr><td><code>UPLOAD_KEYSTORE_BASE64</code></td><td>업로드 키 파일을 글자로 바꾼 값</td></tr>
+<tr><td><code>UPLOAD_KEYSTORE_PASSWORD</code></td><td>키 파일 비밀번호</td></tr>
+<tr><td><code>UPLOAD_KEY_ALIAS</code></td><td>키 별칭(이름)</td></tr>
+<tr><td><code>UPLOAD_KEY_PASSWORD</code></td><td>키 비밀번호</td></tr>
+</table>
+<div class="box danger"><span class="h">절대 하지 말 것</span>
+<ul style="margin:0">
+<li>업로드 키 파일·비밀번호를 저장소에 커밋하기 (공개 저장소면 누구나 가져갑니다)</li>
+<li>AAB를 공개 Releases 링크에 올리기</li>
+<li>비밀번호를 캡처해서 공유하기. Secrets는 한 번 넣으면 GitHub에서도 다시 볼 수 없으니, 원본은 안전한 곳에 따로 보관하세요.</li>
+</ul>
+</div>
+
+<h2><span class="tag">결정</span>④ 가격·앱 이름·카테고리</h2>
+<table>
+<tr><th style="width:24%">항목</th><th style="width:24%">결정</th><th>이유·주의</th></tr>
+<tr><td>가격</td><td><b>무료</b></td><td>무료로 낸 앱은 <b>유료로 바꿀 수 없습니다.</b> 앱 내 결제나 광고는 나중에 추가할 수 있습니다.</td></tr>
+<tr><td>앱 이름</td><td>자동가계부</td><td>스토어에 보이는 이름. 나중에 바꿀 수 있음</td></tr>
+<tr><td>카테고리</td><td>금융</td><td>가계부 앱은 보통 금융</td></tr>
+<tr><td>기본 언어</td><td>한국어(ko-KR)</td><td>한국 사용자 전용</td></tr>
+</table>
+<p>Play Console 첫 화면의 <b>[앱 만들기]</b>(8장 마지막 그림)를 누르면 이 항목들을 묻습니다. 앱 이름·기본 언어·앱/게임·무료/유료를 고르고 정책 동의에 체크하면 앱이 만들어집니다.</p>
+
+<h2><span class="tag">따라 하기</span>⑤ 아이콘: 시안 4개 중 고르기</h2>
+<div class="chat"><div class="cap">실제 대화</div>
+<div class="me"><div class="who">나</div><div class="bubble">앱 아이콘 이미지 멋있는 디자인 없어?</div></div>
+<div class="ai"><div class="who">AI</div><div class="bubble">앱 색(초록·크림)에 맞춰 네 가지 콘셉트를 만들었습니다. A 노트, B 카드+알림, C 영수증+₩, D 달력+체크입니다.</div></div>
+<div class="me"><div class="who">나</div><div class="bubble">B로 하고 싶어</div></div>
+</div>
+<fig src="design-01-icon-concepts.png" class="noborder" marks="300,40,220,220,✓" cap="아이콘 시안 4개. '카드 결제 알림을 자동으로 적는다'는 앱의 핵심이 가장 잘 보이는 B를 골랐다."></fig>
+<div class="row">
+<fig src="icon-512.png" class="narrow" cap="<b>스토어 아이콘</b> 512×512 PNG"></fig>
+<fig src="feature-1024x500.png" cap="<b>그래픽 이미지</b> 1024×500. 스토어 맨 위에 크게 보인다."></fig>
+</div>
+<p>아이콘이 정해지면 AI가 앱 안의 아이콘(여러 크기)과 스토어용 512×512 PNG, 그래픽 이미지(1024×500)를 한 번에 만들어 줍니다.</p>
+
+<h2><span class="tag">따라 하기</span>⑥ 스크린샷 5장</h2>
+<p>스토어 스크린샷은 사람들이 설치를 결정하는 가장 중요한 이미지입니다. 구글의 추천(프로모션) 조건은 <b>한 변 1,080px 이상, 4장 이상</b>입니다. 저자는 5장을 만들었습니다.</p>
+<div class="row">
+<fig src="store-1-main.png"></fig><fig src="store-2-calendar.png"></fig><fig src="store-3-graph.png"></fig><fig src="store-4-cards.png"></fig><fig src="store-5-family.png"></fig>
+</div>
+<ol class="steps">
+<li><b>에뮬레이터에서 자동 캡처</b>AI가 가상 폰의 화면 크기를 1080×1920으로 맞추고, 예시 데이터를 넣은 앱 화면을 자동으로 찍었습니다. 내 실제 결제 내역이 스토어에 나가지 않게 <b>가짜 예시 데이터</b>를 씁니다.</li>
+<li><b>설명 문구 얹기</b>각 화면 위에 "카드 알림이 오면 자동으로 기록" 같은 한 줄 문구를 크게 얹었습니다.</li>
+<li><b>묶음으로 받기</b>아이콘·그래픽·스크린샷을 <code>store-assets.zip</code> 하나로 받아 Play Console에 올렸습니다(10장).</li>
+</ol>
+<div class="chat"><div class="cap">요청 예시</div>
+<div class="me"><div class="who">나</div><div class="bubble">플레이스토어 스크린샷 5장 만들어 줘. 1080×1920, 예시 데이터로 홈·달력·그래프·카드별·가족 화면. 위에 짧은 설명 문구 넣어서.</div></div>
+</div>
+
+<h2><span class="tag">따라 하기</span>⑦ AI 애셋 라벨</h2>
+<p>스토어 등록정보를 저장하면 <b>AI 애셋 선언</b>을 묻습니다. 아이콘·그래픽·문구를 AI로 만들었다면 사실대로 표시해야 합니다. 저자는 모두 AI로 만들었으므로 <b>'AI를 사용하여 생성 또는 수정한 것으로 애셋 라벨 지정'</b>을 고르고, 다음 단계에서 애셋마다 라벨을 붙였습니다.</p>
+<fig src="play-13-ai-asset-label.png" crop="140,240,700,220" w="80%" marks="32,162,360,40,1" cap="기본 스토어 등록정보 → AI 애셋 선언. <b>①</b> AI로 생성·수정한 애셋에 라벨 지정"></fig>
+
+<div class="checklist"><span class="h">9장 체크리스트</span>
+<ul>
+<li>지금 시점의 대상 API 기준(2026년: API 36)에 맞췄고 최신 에뮬레이터로 화면을 확인했다</li>
+<li>패키지 이름을 회사 도메인 기반으로 정했다(첫 업로드 후 변경 불가)</li>
+<li>업로드 키를 만들고 GitHub Secrets 4개를 직접 넣었다(원본은 안전한 곳에 보관)</li>
+<li>Actions에서 AAB가 만들어져 Artifacts에 올라온 것을 확인했다</li>
+<li>무료/유료, 앱 이름, 카테고리를 정했다</li>
+<li>아이콘(512×512), 그래픽 이미지(1024×500), 스크린샷(1080×1920, 4장 이상)을 준비했다</li>
+<li>AI로 만든 애셋에 라벨을 지정했다</li>
+</ul>
+</div>

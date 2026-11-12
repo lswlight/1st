@@ -204,11 +204,14 @@ def build_book():
         pdf = render(page(BOOK["title"], doc), "book")
         reader = PdfReader(str(pdf))
         found = {}
-        for i, pg in enumerate(reader.pages):
-            text = pg.extract_text() or ""
+        # 크롬이 장 제목(h1)으로 만든 PDF 책갈피에서 각 장의 시작 쪽을 찾는다
+        norm = lambda t: re.sub(r"<[^>]+>|\s", "", t)
+        for item in reader.outline:
+            if isinstance(item, list):
+                continue
             for ch in BOOK["chapters"]:
-                if ch["no"] not in found and ch["label"] in text and ch["title"].split("<")[0][:8] in text.replace("\n", " "):
-                    found[ch["no"]] = i + 1
+                if ch["no"] not in found and norm(item.title) == norm(ch["title"]):
+                    found[ch["no"]] = reader.get_destination_page_number(item) + 1
         if found == pages:
             break
         pages = found
