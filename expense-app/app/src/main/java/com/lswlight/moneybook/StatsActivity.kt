@@ -44,6 +44,7 @@ class StatsActivity : Activity() {
         intent.getStringExtra(EXTRA_MONTH)?.let { month = YearMonth.parse(it) }
         tab = intent.getIntExtra(EXTRA_TAB, if (intent.getBooleanExtra(EXTRA_GRAPH, false)) TAB_GRAPH else TAB_CALENDAR)
         setContentView(buildLayout())
+        Ui.fitSystemBars(this)
     }
 
 
@@ -88,6 +89,7 @@ class StatsActivity : Activity() {
     /** 탭을 바꾸면 제목·아래쪽 탭 표시까지 다시 그린다. */
     private fun rebuild() {
         setContentView(buildLayout())
+        Ui.fitSystemBars(this)
         refresh()
     }
 

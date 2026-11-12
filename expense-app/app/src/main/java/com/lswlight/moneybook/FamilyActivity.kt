@@ -36,6 +36,7 @@ class FamilyActivity : Activity() {
         super.onCreate(savedInstanceState)
         intent.getStringExtra(StatsActivity.EXTRA_MONTH)?.let { month = YearMonth.parse(it) }
         setContentView(buildLayout())
+        Ui.fitSystemBars(this)
     }
 
 

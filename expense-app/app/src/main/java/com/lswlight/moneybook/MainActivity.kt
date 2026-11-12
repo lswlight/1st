@@ -41,6 +41,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         db = LedgerDb.get(this)
         setContentView(buildLayout())
+        Ui.fitSystemBars(this)
         if (intent.getBooleanExtra(Ui.EXTRA_OPEN_SETTINGS, false)) monthLabel.post { showSettings() }
     }
 

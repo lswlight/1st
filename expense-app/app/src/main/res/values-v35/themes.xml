@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Android 15 부터는 화면이 상단 끝까지 그려져(edge-to-edge) 내용이 가려지므로, 기존처럼 상태 표시줄 아래부터 그리게 한다 -->
+    <!-- Android 15+ 는 화면이 상태 표시줄·내비게이션 바 아래까지 그려진다(edge-to-edge). 여백은 Ui.fitSystemBars 가 준다 -->
     <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:colorPrimary">#2F9E6E</item>
         <item name="android:colorAccent">#2F9E6E</item>
@@ -8,6 +8,6 @@
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:navigationBarColor">#FFFFFF</item>
         <item name="android:windowBackground">#FBF7F0</item>
-        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 </resources>

@@ -9,7 +9,9 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.view.Gravity
+import android.os.Build
 import android.view.View
+import android.view.WindowInsets
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.LinearLayout
@@ -128,6 +130,23 @@ object Ui {
         if (a !is MainActivity) a.finish()
         @Suppress("DEPRECATION")
         a.overridePendingTransition(0, 0)
+    }
+
+    /**
+     * Android 15+ (대상 API 35 이상) 는 화면이 상태 표시줄·내비게이션 바 아래까지 그려지므로(edge-to-edge),
+     * 내용이 가려지지 않게 시스템 바·키보드 크기만큼 여백을 준다. setContentView 다음에 부른다.
+     */
+    fun fitSystemBars(a: Activity) {
+        if (Build.VERSION.SDK_INT < 35) return
+        val root: View = a.findViewById(android.R.id.content) ?: return
+        root.setOnApplyWindowInsetsListener { v, insets ->
+            val b = insets.getInsets(
+                WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout() or WindowInsets.Type.ime()
+            )
+            v.setPadding(b.left, b.top, b.right, b.bottom)
+            insets
+        }
+        root.requestApplyInsets()
     }
 
     /** 탭 화면의 바탕: 스크롤되는 내용 + 아래쪽 탭. */

@@ -13,6 +13,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      HAS_UPLOAD_KEY: ${{ secrets.UPLOAD_KEYSTORE_BASE64 != '' }}
     defaults:
       run:
         working-directory: expense-app
@@ -57,6 +59,28 @@ jobs:
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           "$BT"/apksigner verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
           "$BT"/aapt2 dump badging app/build/outputs/apk/debug/app-debug.apk | head -8
+
+      # 플레이스토어 업로드용 AAB. 업로드 키(비밀값)가 있을 때만 만든다. 공개 릴리스에는 올리지 않는다
+      - name: 플레이스토어용 AAB 빌드
+        if: env.HAS_UPLOAD_KEY == 'true'
+        env:
+          UPLOAD_KEYSTORE_BASE64: ${{ secrets.UPLOAD_KEYSTORE_BASE64 }}
+          UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.UPLOAD_KEYSTORE_PASSWORD }}
+          UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
+          UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
+        run: |
+          echo "$UPLOAD_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          UPLOAD_KEYSTORE_FILE="$RUNNER_TEMP/upload.jks" ./gradlew bundleRelease --stacktrace
+          rm -f "$RUNNER_TEMP/upload.jks"
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          ls -la app/build/outputs/bundle/release/
+
+      - name: AAB 업로드 (Actions 아티팩트, 로그인한 사람만 받음)
+        if: hashFiles('expense-app/app/build/outputs/bundle/release/*.aab') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: moneybook-aab
+          path: expense-app/app/build/outputs/bundle/release/*.aab
 
       - name: APK 업로드 (Actions 아티팩트)
         uses: actions/upload-artifact@v4
@@ -107,7 +131,7 @@ jobs:
       - name: 에뮬레이터 설치·실행 테스트 + 기기 위 해석기 테스트
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 36
           arch: x86_64
           target: google_apis
           working-directory: expense-app
