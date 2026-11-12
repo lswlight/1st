@@ -74,6 +74,9 @@ jobs:
           rm -f "$RUNNER_TEMP/upload.jks"
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           ls -la app/build/outputs/bundle/release/
+          AAB=app/build/outputs/bundle/release/app-release.aab
+          keytool -printcert -jarfile "$AAB" | grep -E "Owner|SHA256:" | head -2
+          unzip -p "$AAB" base/manifest/AndroidManifest.xml | strings | grep -m1 -o "com\.graftkorea\.moneybook"
 
       - name: AAB 업로드 (Actions 아티팩트, 로그인한 사람만 받음)
         if: hashFiles('expense-app/app/build/outputs/bundle/release/*.aab') != ''
