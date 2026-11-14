@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 아이콘 바탕: 위 왼쪽 밝은 초록 → 아래 오른쪽 짙은 초록 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:angle="315"
+        android:startColor="#3BB37F"
+        android:endColor="#1F7A52" />
+</shape>
