@@ -393,4 +393,14 @@ class CardMessageParserTest {
         assertEquals(15000L, parse("[현대카드] 승인 이*우 15,000원 일시불 11/05 12:30 스타벅스")!!.amount)
         assertEquals(8900L, parse("토스페이\n결제금액 8,900원\nGS25에서 결제했어요", trusted = true)!!.amount)
     }
+
+    @Test
+    fun cardBillPaymentFromBankIsIgnored() {
+        // 은행 계좌에서 카드 대금이 빠져나간 알림: 결제 때 이미 기록했으므로 제외
+        assertNull(parse("MG새마을금고\n[출금] 1,138,057원 9003-2963-****-1 잔액 11,943원 11/13 21:48 하나카드결제", trusted = true))
+        assertNull(parse("[KB국민은행] 출금 352,100원 삼성카드대금 잔액 1,000,000원", trusted = true))
+        assertNull(parse("우리은행 출금 120,000원 신한카드 결제 잔액 50,000원", trusted = true))
+        // 체크카드로 가게에서 쓴 출금은 그대로 기록
+        assertEquals(18500L, parse("MG새마을금고\n[출금] 18,500원 9003-2963-****-1 잔액 11,943원 11/13 12:10 체크카드 양천돈까스", trusted = true)!!.amount)
+    }
 }

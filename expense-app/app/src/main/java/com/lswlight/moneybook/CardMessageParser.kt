@@ -88,6 +88,10 @@ object CardMessageParser {
     private val PAYMENT_WORD = Regex("""승인|결제|사용|일시불|할부|취소|출금""")
     private val CARD_APPROVAL = Regex("""승인|결제|카드|체크""")
     private val AUTO_DEBIT = Regex("""자동\s*이체|자동\s*납부|자동\s*출금""")
+    // 은행 계좌에서 카드 대금이 빠져나가는 출금 (예: "[출금] 1,138,057원 … 하나카드결제"). 결제할 때 이미 기록했으므로 다시 적지 않는다
+    private val CARD_BILL_PAYMENT = Regex(
+        """(KB국민|국민|신한|현대|삼성|롯데|하나|우리|NH농협|농협|BC|비씨|씨티|IBK기업|IBK|기업)\s*카드\s*(결제|대금)|카드\s*대금"""
+    )
 
     // 은행 출금 알림 (문자·카카오톡으로 받은 경우): 은행 이름 + 출금 + 잔액이 모두 있어야 인정 (일반 대화와 구분)
     private val BANK_NAME = Regex("""은행|금고|뱅크|신협|우체국|농협|수협""")
@@ -117,6 +121,7 @@ object CardMessageParser {
         // 은행 계좌 출금 알림은 기록하지 않는다. 체크카드 결제는 은행이 따로 보내는 "체크카드 … 승인" 알림으로 기록되고,
         // 카드 승인이 없는 출금은 계좌 이체·송금·ATM 출금이기 때문. 자동이체(통신비·관리비 등)만 지출로 남긴다
         if (body.contains("출금") && !CARD_APPROVAL.containsMatchIn(body) && !AUTO_DEBIT.containsMatchIn(body)) return null
+        if (body.contains("출금") && CARD_BILL_PAYMENT.containsMatchIn(body) && !body.contains("승인")) return null
         // "승인/결제" 단어가 없어도 "캐시백 -2,000원" 처럼 - 붙은 혜택 금액이면 인정한다
         val benefitNotice = BENEFIT_WORD.containsMatchIn(body) && MINUS_AMOUNT.containsMatchIn(body)
         if (!PAYMENT_WORD.containsMatchIn(body) && !benefitNotice) return null
