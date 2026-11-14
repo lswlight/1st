@@ -451,6 +451,16 @@ class MainActivity : Activity() {
             val color = if (it.result.startsWith("기록됨")) INCOME_COLOR else EXPENSE_COLOR
             body.addView(text(it.result, 14f, color, bold = true))
             body.addView(text(it.text.ifBlank { "(알림 내용이 비어 있음)" }, 13f))
+            // 읽지 않는 앱에서 온 결제 알림: 눌러서 그 앱을 읽을 앱으로 추가
+            if (it.result == DetectLog.NOT_WATCHED && it.pkg.isNotEmpty() && !WatchedApps.contains(this, it.pkg)) {
+                val item = it
+                body.addView(button("'${item.app}' 결제 알림도 읽기") {
+                    WatchedApps.add(this, item.pkg)
+                    val n = reprocessMissed()
+                    toast(if (n > 0) "'${item.app}' 추가 · ${n}건을 기록했어요" else "'${item.app}' 를 추가했어요. 다음 결제부터 기록돼요")
+                    refresh()
+                })
+            }
         }
         AlertDialog.Builder(this)
             .setTitle("최근 감지 알림")
@@ -468,7 +478,10 @@ class MainActivity : Activity() {
     private fun reprocessMissed(): Int {
         val messageApps = setOf("카카오톡", "삼성 메시지", "Google 메시지")
         var count = 0
-        for (item in DetectLog.list(this).filter { it.result == "결제 문구 아님" }) {
+        val missedItems = DetectLog.list(this).filter {
+            it.result == "결제 문구 아님" || (it.result == DetectLog.NOT_WATCHED && WatchedApps.contains(this, it.pkg))
+        }
+        for (item in missedItems) {
             val trusted = item.app !in messageApps
             val p = CardMessageParser.parse(item.text, item.time, trusted, ExchangeRates.cached(this), ExchangeRates.feePercent(this)) ?: continue
             if (ExcludeList.match(this, p.merchant) != null) continue

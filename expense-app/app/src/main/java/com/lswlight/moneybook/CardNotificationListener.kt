@@ -29,9 +29,20 @@ class CardNotificationListener : NotificationListenerService() {
         // 앱 이름에 "카드" 가 들어가면 (예: 하나Pay 의 "하나카드") 카드사 앱,
         // "은행·뱅크·금고" 등이 들어가면 (예: MG새마을금고) 은행 앱으로 보고 출금 알림을 기록한다
         val label = appLabel(pkg)
-        val trusted = isCardApp(pkg) || label.contains("카드") || BANK_LABEL.containsMatchIn(label)
+        val watched = WatchedApps.contains(this, pkg)
+        val trusted = isCardApp(pkg) || label.contains("카드") || BANK_LABEL.containsMatchIn(label) || watched
         val payLabel = PAY_LABEL.containsMatchIn(label) || label.contains("대구로")
-        if (!trusted && !payLabel && pkg !in MESSAGE_APPS && pkg != WECHAT) return
+        if (!trusted && !payLabel && pkg !in MESSAGE_APPS && pkg != WECHAT) {
+            // 읽지 않는 앱이지만 결제처럼 보이는 알림은 '최근 감지 알림'에 남겨, 사용자가 그 앱을 추가할 수 있게 한다
+            val n = sbn.notification
+            if (n.flags and Notification.FLAG_GROUP_SUMMARY == 0) {
+                val t = notificationText(n)
+                if (PAYMENT_LIKE.containsMatchIn(t) && MONEY_LIKE.containsMatchIn(CardMessageParser.normalizeWon(t))) {
+                    worker.execute { DetectLog.add(this, pkg, DetectLog.NOT_WATCHED, "$label\n$t", label) }
+                }
+            }
+            return
+        }
 
         val n = sbn.notification
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
@@ -41,7 +52,7 @@ class CardNotificationListener : NotificationListenerService() {
         val text = when {
             // 위챗: 대화 알림은 버리고 위챗페이 결제 알림만, 위안화(¥) 금액을 CNY 로 바꿔 해외 결제처럼 읽는다
             pkg == WECHAT -> CardMessageParser.wechatPay(raw) ?: return
-            label.contains("카드") || payLabel -> "$label\n$raw"
+            label.contains("카드") || payLabel || watched -> "$label\n$raw"
             else -> raw
         }
         val posted = sbn.postTime.toLocalDateTime()
@@ -184,7 +195,8 @@ class CardNotificationListener : NotificationListenerService() {
         private const val TAG = "MoneyBook"
 
         const val WECHAT = "com.tencent.mm"
-        val PAY_LABEL = Regex("""페이|[Pp]ay""")
+        val PAY_LABEL = Regex("""페이|pay""", RegexOption.IGNORE_CASE)
+        private val PAYMENT_LIKE = Regex("""결제|승인|사용|출금|이용""")
 
         private val BANK_LABEL = Regex("""은행|뱅크|뱅킹|금고|신협|우체국|원큐""")
 

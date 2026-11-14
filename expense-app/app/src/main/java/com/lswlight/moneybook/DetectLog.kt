@@ -14,16 +14,20 @@ object DetectLog {
     private const val KEY = "items"
     private const val MAX = 50
 
-    data class Item(val time: LocalDateTime, val app: String, val result: String, val text: String)
+    /** 읽지 않는 앱에서 온 결제 같은 알림에 붙는 결과 문구 (이 항목을 누르면 그 앱을 추가할 수 있다) */
+    const val NOT_WATCHED = "읽지 않는 앱이라 건너뜀"
+
+    data class Item(val time: LocalDateTime, val app: String, val result: String, val text: String, val pkg: String = "")
 
     @Synchronized
-    fun add(context: Context, pkg: String, result: String, text: String) {
+    fun add(context: Context, pkg: String, result: String, text: String, label: String? = null) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val old = JSONArray(prefs.getString(KEY, "[]"))
         val out = JSONArray().put(
             JSONObject()
                 .put("time", System.currentTimeMillis())
-                .put("app", appName(pkg))
+                .put("app", label ?: appName(pkg))
+                .put("pkg", pkg)
                 .put("result", result)
                 .put("text", text.take(300))
         )
@@ -35,7 +39,7 @@ object DetectLog {
         val arr = JSONArray(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, "[]"))
         return (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
-            Item(o.getLong("time").toLocalDateTime(), o.getString("app"), o.getString("result"), o.getString("text"))
+            Item(o.getLong("time").toLocalDateTime(), o.getString("app"), o.getString("result"), o.getString("text"), o.optString("pkg"))
         }
     }
 
