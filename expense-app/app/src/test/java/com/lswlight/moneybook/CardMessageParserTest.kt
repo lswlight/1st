@@ -403,4 +403,26 @@ class CardMessageParserTest {
         // 체크카드로 가게에서 쓴 출금은 그대로 기록
         assertEquals(18500L, parse("MG새마을금고\n[출금] 18,500원 9003-2963-****-1 잔액 11,943원 11/13 12:10 체크카드 양천돈까스", trusted = true)!!.amount)
     }
+
+    @Test
+    fun wonSignAndLocalPay() {
+        // 삼성 월렛에 넣은 대구로페이: 금액이 "₩50,000" 꼴
+        val p = parse("삼성 월렛\n대구로페이_모바일\n십삼월사진관에서 ₩50,000 결제", trusted = true)!!
+        assertEquals(50000L, p.amount)
+        assertEquals("대구로페이", p.card)
+        assertEquals("십삼월사진관", p.merchant)
+        val q = parse("대구로페이_모바일\n₩50,000\n십삼월사진관 결제 완료", trusted = true)!!
+        assertEquals(50000L, q.amount)
+    }
+
+    @Test
+    fun wechatPayInYuan() {
+        val t = CardMessageParser.wechatPay("微信支付\n支付成功 ¥45.00\n瑞幸咖啡")!!
+        val p = CardMessageParser.parse(t, rates = mapOf("CNY" to 200.0), feePercent = 2.0)!!
+        assertEquals("CNY 45.00", p.foreign)
+        assertEquals(9180L, p.amount)
+        assertEquals("위챗페이", p.card)
+        // 위챗 일반 대화는 무시
+        assertNull(CardMessageParser.wechatPay("친구: 오늘 저녁 ¥45 나눠 내자"))
+    }
 }

@@ -30,14 +30,20 @@ class CardNotificationListener : NotificationListenerService() {
         // "은행·뱅크·금고" 등이 들어가면 (예: MG새마을금고) 은행 앱으로 보고 출금 알림을 기록한다
         val label = appLabel(pkg)
         val trusted = isCardApp(pkg) || label.contains("카드") || BANK_LABEL.containsMatchIn(label)
-        val payLabel = PAY_LABEL.containsMatchIn(label)
-        if (!trusted && !payLabel && pkg !in MESSAGE_APPS) return
+        val payLabel = PAY_LABEL.containsMatchIn(label) || label.contains("대구로")
+        if (!trusted && !payLabel && pkg !in MESSAGE_APPS && pkg != WECHAT) return
 
         val n = sbn.notification
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
 
         // 카드사 앱 알림은 제목이 "결제" 뿐이라, 앱 이름을 첫 줄로 붙여 카드사를 알 수 있게 한다
-        val text = notificationText(n).let { if (label.contains("카드") || payLabel) "$label\n$it" else it }
+        val raw = notificationText(n)
+        val text = when {
+            // 위챗: 대화 알림은 버리고 위챗페이 결제 알림만, 위안화(¥) 금액을 CNY 로 바꿔 해외 결제처럼 읽는다
+            pkg == WECHAT -> CardMessageParser.wechatPay(raw) ?: return
+            label.contains("카드") || payLabel -> "$label\n$raw"
+            else -> raw
+        }
         val posted = sbn.postTime.toLocalDateTime()
         worker.execute {
             try {
@@ -177,6 +183,7 @@ class CardNotificationListener : NotificationListenerService() {
     companion object {
         private const val TAG = "MoneyBook"
 
+        const val WECHAT = "com.tencent.mm"
         val PAY_LABEL = Regex("""페이|[Pp]ay""")
 
         private val BANK_LABEL = Regex("""은행|뱅크|뱅킹|금고|신협|우체국|원큐""")

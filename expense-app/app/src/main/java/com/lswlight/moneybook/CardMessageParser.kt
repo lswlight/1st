@@ -114,7 +114,7 @@ object CardMessageParser {
         rates: Map<String, Double> = emptyMap(),
         feePercent: Double = 0.0,
     ): ParsedPayment? {
-        val body = text.replace("\r", "").lines().joinToString("\n") { it.trim() }.trim()
+        val body = normalizeWon(text.replace("\r", "").lines().joinToString("\n") { it.trim() }.trim())
         if (body.isEmpty() || EXCLUDE.containsMatchIn(body)) return null
         // 승인 문구 없이 적립 안내만 있으면 기록하지 않는다
         if (POINT_NOTICE.containsMatchIn(body) && !body.contains("승인")) return null
@@ -132,7 +132,8 @@ object CardMessageParser {
         val foreign = if (krw == null) findForeign(body) else null
         val rate = foreign?.let { rates[it.first] ?: FALLBACK_KRW_PER_UNIT[it.first] } ?: 0.0
         val amount = krw ?: foreign?.let { toKrw(it.second, rate * (1 + feePercent / 100)) } ?: return null
-        val card = (CARD.find(body) ?: CARD_SHORT.find(body))?.let { normalizeCard(it.groupValues[1]) }
+        val card = LOCAL_PAY.find(body)?.value
+            ?: (CARD.find(body) ?: CARD_SHORT.find(body))?.let { normalizeCard(it.groupValues[1]) }
             ?: if (body.contains("[KB]")) "KB국민카드" else ""
 
         return ParsedPayment(
@@ -281,6 +282,26 @@ object CardMessageParser {
 
     /** 카드사 이름이 담긴 카드 표시인지 (예: "신한카드", "토스뱅크카드"). 앱 이름·포인트 결제가 아닌지 볼 때 쓴다. */
     fun isRealCard(card: String) = card.endsWith("카드") && POINT_PAY.find(card) == null
+
+    private val WECHAT_PAY = Regex("""微信支付|WeChat\s*Pay|위챗\s*페이""", RegexOption.IGNORE_CASE)
+    private val YUAN = Regex("""(?:[¥￥]|RMB|CNY)\s*(\d[\d,]*(?:\.\d+)?)""")
+
+    /** 위챗페이 결제 알림이면 "위챗페이 결제 / CNY 45.00 …" 꼴로 바꾸고, 아니면 null. */
+    fun wechatPay(text: String): String? {
+        if (!WECHAT_PAY.containsMatchIn(text)) return null
+        val m = YUAN.find(text) ?: return null
+        val cancel = Regex("""退款|Refund|환불|취소""", RegexOption.IGNORE_CASE).containsMatchIn(text)
+        val body = text.replace(YUAN, "").replace(WECHAT_PAY, "").trim()
+        return "위챗페이 ${if (cancel) "취소" else "결제"}\nCNY ${m.groupValues[1]}\n$body"
+    }
+
+
+    // "₩50,000" (삼성 월렛 등) 을 "50,000원" 으로 바꿔 다른 문구와 똑같이 읽는다
+    private val WON_SIGN = Regex("""[₩￦]\s*(\d[\d,]*)""")
+    fun normalizeWon(s: String) = s.replace(WON_SIGN, "$1원")
+
+    // 지역화폐·선불 페이 이름은 카드 이름으로 그대로 쓴다 (예: 삼성 월렛의 "대구로페이_모바일")
+    private val LOCAL_PAY = Regex("""대구로페이|위챗페이""")
 
     private fun normalizeCard(name: String) = when (name) {
         "국민", "KB국민" -> "KB국민카드"
