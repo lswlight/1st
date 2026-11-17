@@ -425,4 +425,10 @@ class CardMessageParserTest {
         // 위챗 일반 대화는 무시
         assertNull(CardMessageParser.wechatPay("친구: 오늘 저녁 ¥45 나눠 내자"))
     }
+
+    @Test
+    fun cardBillPaidNoticeIsIgnored() {
+        // 카드사가 보내는 '카드대금 결제완료' 안내: 이미 쓸 때 기록했으므로 제외
+        assertNull(parse("KB국민카드\n[Web발신] KB국민카드 이*우님 11/17 15:06 카드대금 468,454원 결제완료"))
+    }
 }
