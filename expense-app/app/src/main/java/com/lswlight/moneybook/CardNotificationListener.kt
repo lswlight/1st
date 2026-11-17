@@ -91,8 +91,12 @@ class CardNotificationListener : NotificationListenerService() {
             parsed = CardMessageParser.parse(text, posted, trusted, ExchangeRates.cached(this), fee)
         }
         if (parsed == null) {
-            // 금액처럼 보이는 게 있는 알림만 남긴다 (일반 카톡 대화로 기록이 금방 밀려나지 않게)
-            if (MONEY_LIKE.containsMatchIn(text)) DetectLog.add(this, pkg, "결제 문구 아님", text)
+            // 금액처럼 보이는 게 있는 알림만 남긴다 (일반 카톡 대화로 기록이 금방 밀려나지 않게).
+            // 페이·카드 앱은 문구가 달라 못 읽는 경우를 찾을 수 있게 숫자가 있으면 남긴다
+            val payApp = pkg in PAY_APPS || PAY_LABEL.containsMatchIn(label) || WatchedApps.contains(this, pkg)
+            if (MONEY_LIKE.containsMatchIn(CardMessageParser.normalizeWon(text)) || (payApp && text.any { it.isDigit() })) {
+                DetectLog.add(this, pkg, "결제 문구 아님", text)
+            }
             return
         }
 
@@ -188,7 +192,13 @@ class CardNotificationListener : NotificationListenerService() {
             ?: lastMessage
             ?: ex.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)?.joinToString("\n")
             ?: ex.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
-        return listOf(title, conversation, body).filter { it.isNotBlank() }.distinct().joinToString("\n")
+        // 삼성 월렛 등 일부 앱은 금액·가맹점을 보조 문구나 상태 표시줄 문구(ticker)에만 넣는다
+        val sub = ex.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString().orEmpty()
+        val summary = ex.getCharSequence(Notification.EXTRA_SUMMARY_TEXT)?.toString().orEmpty()
+        val ticker = n.tickerText?.toString().orEmpty()
+        return listOf(title, conversation, body, sub, summary, ticker)
+            .filter { it.isNotBlank() }.distinct()
+            .joinToString("\n")
     }
 
     companion object {
@@ -227,6 +237,7 @@ class CardNotificationListener : NotificationListenerService() {
             "kvp.jjy.MispAndroid320",              // BC 페이북
             "com.naverfin.payapp",                 // 네이버페이
             "com.samsung.android.spay",            // 삼성페이(삼성 월렛)
+            "com.samsung.android.spayfw",          // 삼성페이 결제 모듈 (결제 완료 알림을 이쪽에서 보내는 기기가 있다)
         )
 
         // 신한·KB·현대·삼성·롯데·우리 등 카드사 앱은 패키지 이름에 card 가 들어간다
