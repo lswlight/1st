@@ -1,0 +1,173 @@
+name: 자동가계부 APK 빌드
+
+on:
+  push:
+    paths:
+      - "expense-app/**"
+      - ".github/workflows/expense-app.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      HAS_UPLOAD_KEY: ${{ secrets.UPLOAD_KEYSTORE_BASE64 != '' }}
+    defaults:
+      run:
+        working-directory: expense-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: 테스트 및 APK 빌드
+        run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
+
+      - name: 환율 서비스 응답 확인 (참고용)
+        continue-on-error: true
+        run: |
+          curl -sS -m 10 https://open.er-api.com/v6/latest/KRW | head -c 400; echo
+          curl -sS -m 10 https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/krw.json | grep -o '"date":"[^"]*"\|"jpy":[0-9.e-]*\|"usd":[0-9.e-]*'
+
+      - name: 가족 공유 서버 동작 확인 (방 만들기 → 올리기 → 받기 → 삭제)
+        continue-on-error: true
+        run: |
+          S=$(grep -o 'DEFAULT_SERVER = "[^"]*"' app/src/main/java/com/lswlight/moneybook/FamilySync.kt | cut -d'"' -f2)
+          echo "서버: $S"; curl -sS -m 15 "$S/health"; echo
+          R=$(curl -sS -m 15 -X POST "$S/api/households" -H 'Content-Type: application/json' -d '{}')
+          W=$(echo "$R" | jq -r .writeKey); V=$(echo "$R" | jq -r .viewToken)
+          test -n "$W" && test "$W" != null
+          NOW=$(( $(date +%s) * 1000 ))
+          curl -sS -m 15 -X POST "$S/api/entries" -H "Authorization: Bearer $W" -H 'Content-Type: application/json' \
+            -d "{\"entries\":[{\"uid\":\"ci-1\",\"owner\":\"CI\",\"kind\":\"EXPENSE\",\"amount\":1234,\"memo\":\"점검\",\"card\":\"테스트\",\"time\":$NOW,\"deleted\":false}]}"; echo
+          G=$(curl -sS -m 15 "$S/api/entries?v=$V&from=$((NOW-60000))&to=$((NOW+60000))"); echo "$G"
+          echo "$G" | jq -e '.entries[0].amount == 1234'
+          curl -sS -m 15 -o /dev/null -w "보기 화면 HTTP %{http_code}\n" "$S/v/$V"
+          for p in / /app /privacy /terms; do curl -sS -m 15 -o /dev/null -w "$p HTTP %{http_code}\n" "$S$p"; done
+          curl -sS -m 15 -X DELETE "$S/api/households" -H "Authorization: Bearer $W"; echo
+
+      - name: 서명 및 패키지 정보 확인
+        run: |
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT"/apksigner verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
+          "$BT"/aapt2 dump badging app/build/outputs/apk/debug/app-debug.apk | head -8
+
+      # 플레이스토어 업로드용 AAB. 업로드 키(비밀값)가 있을 때만 만든다. 공개 릴리스에는 올리지 않는다
+      - name: 플레이스토어용 AAB 빌드
+        if: env.HAS_UPLOAD_KEY == 'true'
+        env:
+          UPLOAD_KEYSTORE_BASE64: ${{ secrets.UPLOAD_KEYSTORE_BASE64 }}
+          UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.UPLOAD_KEYSTORE_PASSWORD }}
+          UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
+          UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
+        run: |
+          echo "$UPLOAD_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          UPLOAD_KEYSTORE_FILE="$RUNNER_TEMP/upload.jks" ./gradlew bundleRelease --stacktrace
+          rm -f "$RUNNER_TEMP/upload.jks"
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          ls -la app/build/outputs/bundle/release/
+          AAB=app/build/outputs/bundle/release/app-release.aab
+          keytool -printcert -jarfile "$AAB" | grep -E "Owner|SHA256:" | head -2
+          unzip -p "$AAB" base/manifest/AndroidManifest.xml | strings | grep -m1 -o "com\.graftkorea\.moneybook"
+
+      - name: AAB 업로드 (Actions 아티팩트, 로그인한 사람만 받음)
+        if: hashFiles('expense-app/app/build/outputs/bundle/release/*.aab') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: moneybook-aab
+          path: expense-app/app/build/outputs/bundle/release/*.aab
+
+      - name: APK 업로드 (Actions 아티팩트)
+        uses: actions/upload-artifact@v4
+        with:
+          name: moneybook-apk
+          path: expense-app/app/build/outputs/apk/debug/app-debug.apk
+
+      # 폰 브라우저에서 바로 받을 수 있게 Releases 의 moneybook-latest 에 최신 APK 를 올린다
+      - name: 최신 APK 릴리스 갱신
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk moneybook.apk
+          gh release delete moneybook-latest --yes --cleanup-tag || true
+          gh release create moneybook-latest moneybook.apk \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "자동가계부 최신 APK" \
+            --notes "브랜치 ${GITHUB_REF_NAME} / 커밋 ${GITHUB_SHA::7} 에서 자동 빌드됨. 폰에서 moneybook.apk 를 받아 설치하세요."
+
+  # 실제 안드로이드(에뮬레이터)에 설치하고 실행되는지 확인한다
+  install-test:
+    needs: build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: expense-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: moneybook-apk
+          path: expense-app
+
+      - name: KVM 사용 설정
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: 에뮬레이터 설치·실행 테스트 + 기기 위 해석기 테스트
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          arch: x86_64
+          target: google_apis
+          working-directory: expense-app
+          script: |
+            adb install -r app-debug.apk
+            # 스토어 스크린샷에 '자동 감지 꺼짐' 안내가 나오지 않게 알림 접근을 미리 허용한다
+            adb shell cmd notification allow_listener com.lswlight.moneybook/com.lswlight.moneybook.CardNotificationListener || true
+            # 스토어 스크린샷 규격(9:16, 1080px 이상)으로 캡처되게 화면 크기를 맞춘다
+            adb shell wm size 1080x1920
+            adb shell wm density 420
+            sleep 3
+            adb shell am start -W -n com.lswlight.moneybook/.MainActivity
+            sleep 5
+            adb shell pidof com.lswlight.moneybook
+            ./gradlew connectedDebugAndroidTest --stacktrace
+            adb pull /data/local/tmp/stats-calendar.png stats-calendar.png || true
+            adb pull /data/local/tmp/stats-graph.png stats-graph.png || true
+            adb pull /data/local/tmp/stats-main.png stats-main.png || true
+            adb pull /data/local/tmp/stats-cards.png stats-cards.png || true
+            adb pull /data/local/tmp/stats-family.png stats-family.png || true
+
+      - name: 달력·그래프 화면 캡처 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stats-screenshots
+          path: expense-app/stats-*.png
+          if-no-files-found: ignore
+
+      - name: 달력·그래프 화면 미리보기를 릴리스에 올리기
+        if: github.event_name == 'push'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls stats-*.png && gh release upload moneybook-latest stats-main.png stats-calendar.png stats-graph.png stats-cards.png stats-family.png --clobber --repo "$GITHUB_REPOSITORY"
