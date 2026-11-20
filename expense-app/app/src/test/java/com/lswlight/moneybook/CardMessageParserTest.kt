@@ -431,4 +431,17 @@ class CardMessageParserTest {
         // 카드사가 보내는 '카드대금 결제완료' 안내: 이미 쓸 때 기록했으므로 제외
         assertNull(parse("KB국민카드\n[Web발신] KB국민카드 이*우님 11/17 15:06 카드대금 468,454원 결제완료"))
     }
+
+    @Test
+    fun moreCardBillWithdrawalsAreIgnored() {
+        // 은행 통장에서 빠져나간 카드대금: 문구가 달라도 모두 제외
+        assertNull(parse("[신한은행] 출금 352,100원 신한카드 자동이체 잔액 120,000원", trusted = true))
+        assertNull(parse("우리은행\n출금 210,000원 삼성카드(주) 잔액 90,000원", trusted = true))
+        assertNull(parse("[KB국민은행] 11/25 출금 468,454원 KB카드출금 잔액 1,000원", trusted = true))
+        assertNull(parse("NH농협 출금 99,000원 현대카드 자동납부 잔액 5,000원", trusted = true))
+        // 관리비·통신비 같은 일반 자동이체는 그대로 지출
+        assertEquals(269140L, parse("[신한은행] 출금 269,140원 APT관리비 자동이체 잔액 120,000원", trusted = true)!!.amount)
+        // 카드사 승인 알림은 그대로 기록
+        assertEquals(12500L, parse("[신한카드] 승인 홍*동 12,500원 일시불 11/12 12:31 스타벅스")!!.amount)
+    }
 }
